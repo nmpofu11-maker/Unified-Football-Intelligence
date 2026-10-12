@@ -3,7 +3,18 @@ import assert from "node:assert/strict";
 import { mapSportApiAiFixture } from "../src/providers/adapters/sportApiAi.js";
 import { mapSportmonksFixture } from "../src/providers/adapters/sportmonks.js";
 
-test("SportAPI.ai mapping requires provider IDs and timezone-explicit kickoff", () => {
+test("SportAPI.ai maps documented string teams and league when provider IDs are not supplied", () => {
+  const documented = { id: 45821, date: "2026-06-14", datetime: "2026-06-14T18:00:00Z", status: "Scheduled", league: "FIFA World Cup", home_team: "Brazil", away_team: "Mexico" };
+  const mappedDocumented = mapSportApiAiFixture(documented, "2026-10-12T12:00:00.000Z");
+  assert.equal(mappedDocumented?.home.name, "Brazil");
+  assert.equal(mappedDocumented?.away.name, "Mexico");
+  assert.equal(mappedDocumented?.competition.name, "FIFA World Cup");
+  assert.equal(mappedDocumented?.kickoffUtc, "2026-06-14T18:00:00.000Z");
+  assert.equal(mappedDocumented?.home.providerTeamId, undefined);
+  assert.equal(mappedDocumented?.competition.providerCompetitionId, undefined);
+});
+
+test("SportAPI.ai mapping requires timezone-explicit kickoff", () => {
   const base = { id: 123, date: "2026-10-17T16:30:00Z", status: "SCHEDULED", league: {id: 8, name: "Example League"}, home_team: {id: 1, name: "Home FC"}, away_team: {id: 2, name: "Away FC"} };
   const mapped = mapSportApiAiFixture(base, "2026-10-12T12:00:00.000Z");
   assert.equal(mapped?.providerFixtureId, "123");
