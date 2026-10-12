@@ -2,67 +2,119 @@ import type { FixtureQuery, ProviderDiagnostics, ProviderFixtureCandidate } from
 import type { FootballDataProvider } from "../provider.js";
 
 const NAME = "sportapi-ai";
-let diagnostics: ProviderDiagnostics = { provider: NAME, state: "idle", lastRecordCount: 0 };
+const EMPTY_DIAGNOSTICS: ProviderDiagnostics = { provider: NAME, state: "idle", lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0 };
+let diagnostics: ProviderDiagnostics = { ...EMPTY_DIAGNOSTICS };
 const key = () => (process.env.SPORTAPI_AI_KEY || process.env.SPORTAPI_API_KEY || "").trim();
 const base = () => (process.env.SPORTAPI_AI_BASE_URL || "https://sportapi.ai/api").replace(/\/+$/, "");
-const utc = (value: unknown): string | null => {
+
+function utc(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   const v = value.trim();
   if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(v)) return null;
   const date = new Date(v);
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
-};
-const statusMap = (value: unknown): ProviderFixtureCandidate["status"] => {
+}
+function statusMap(value: unknown): ProviderFixtureCandidate["status"] {
   const s = String(value ?? "unknown").trim().toLowerCase().replace(/[\s-]+/g, "_");
   if (["scheduled", "not_started", "ns", "upcoming", "fixture"].includes(s)) return "scheduled";
-  if (["live", "in_play", "1h", "2h", "ht", "in_progress"].includes(s)) return "live";
-  if (["finished", "ft", "aet", "pen", "final", "completed", "ended"].includes(s)) return "finished";
+  if (["live", "in_play", "1h", "2h", "ht", "in_progress", "half_time"].includes(s)) return "live";
+  if (["finished", "ft", "aet", "pen", "final", "completed", "ended", "full_time"].includes(s)) return "finished";
   if (s.includes("postpon")) return "postponed";
   if (s.includes("cancel")) return "cancelled";
   if (s.includes("abandon")) return "abandoned";
   return "unknown";
+}
+const obj = (v: unknown): Record<string, any> | null => v && typeof v === "object" && !Array.isArray(v) ? v as Record<string, any> : null;
+const first = (...values: unknown[]) => values.find(v => v !== undefined && v !== null && String(v).trim() !== "");
+const idOf = (v: unknown): unknown => {
+  const o = obj(v);
+  return o ? first(o.id, o.fixture_id, o.fixtureId, o.team_id, o.teamId, o.competition_id, o.competitionId) : v;
 };
-
+const nameOf = (v: unknown): unknown => {
+  const o = obj(v);
+  return o ? first(o.name, o.title, o.display_name, o.displayName, o.short_name, o.shortName) : v;
+};
+function envelope(payload: unknown): { rows: unknown[] | null; topLevelKeys: string[] } {
+  if (Array.isArray(payload)) return { rows: payload, topLevelKeys: ["<array>"] };
+  const root = obj(payload);
+  if (!root) return { rows: null, topLevelKeys: [] };
+  const data = obj(root.data);
+  const rows = Array.isArray(root.fixtures) ? root.fixtures
+    : Array.isArray(root.records) ? root.records
+    : Array.isArray(data?.fixtures) ? data!.fixtures
+    : Array.isArray(data?.records) ? data!.records
+    : Array.isArray(root.data) ? root.data
+    : null;
+  return { rows, topLevelKeys: Object.keys(root).sort().slice(0, 30) };
+}
 export function mapSportApiAiFixture(raw: unknown, observedAt = new Date().toISOString()): ProviderFixtureCandidate | null {
-  if (!raw || typeof raw !== "object") return null;
-  const f = raw as Record<string, any>;
-  const fixtureId = f.id ?? f.fixture_id ?? f.fixture?.id;
-  const home = f.home_team ?? f.homeTeam ?? f.teams?.home;
-  const away = f.away_team ?? f.awayTeam ?? f.teams?.away;
-  const league = f.league ?? f.competition ?? f.competition_name;
-  const leagueId = typeof league === "object" ? league?.id : f.league_id ?? f.competition_id;
-  const leagueName = typeof league === "string" ? league : league?.name;
-  const kickoff = utc(f.kickoff_utc ?? f.kickoffUtc ?? f.kickoff_time_utc ?? f.date ?? f.fixture?.date);
-  if (fixtureId == null || home?.id == null || away?.id == null || !String(home?.name ?? "").trim() || !String(away?.name ?? "").trim() || leagueId == null || !String(leagueName ?? "").trim() || !kickoff) return null;
-  const rawStatus = String(f.status?.short ?? f.status?.name ?? f.status ?? f.state ?? "unknown");
+  const f = obj(raw);
+  if (!f) return null;
+  const fixture = obj(f.fixture);
+  const teams = obj(f.teams);
+  const home = obj(first(f.home_team, f.homeTeam, f.home, teams?.home, fixture?.home_team));
+  const away = obj(first(f.away_team, f.awayTeam, f.away, teams?.away, fixture?.away_team));
+  const leagueRaw = first(f.league, f.competition, f.tournament, f.competition_name);
+  const league = obj(leagueRaw);
+  const fixtureId = first(f.id, f.fixture_id, f.fixtureId, fixture?.id);
+  const homeId = first(home?.id, home?.team_id, home?.teamId, f.home_team_id);
+  const awayId = first(away?.id, away?.team_id, away?.teamId, f.away_team_id);
+  const homeName = first(home?.name, home?.team_name, home?.teamName, typeof f.home_team === "string" ? f.home_team : undefined);
+  const awayName = first(away?.name, away?.team_name, away?.teamName, typeof f.away_team === "string" ? f.away_team : undefined);
+  const leagueId = first(league?.id, league?.league_id, league?.competition_id, f.league_id, f.competition_id, f.tournament_id);
+  const leagueName = first(typeof leagueRaw === "string" ? leagueRaw : undefined, league?.name, league?.title, f.league_name, f.competition_name, f.tournament_name);
+  const kickoff = utc(first(f.kickoff_utc, f.kickoffUtc, f.kickoff_time_utc, f.kickoff, f.kickoffAt, f.datetime, f.date, fixture?.date, fixture?.kickoff));
+  if (fixtureId == null || !String(fixtureId).trim() || homeId == null || awayId == null ||
+      !String(homeName ?? "").trim() || !String(awayName ?? "").trim() ||
+      leagueId == null || !String(leagueName ?? "").trim() || !kickoff) return null;
+  const rawStatus = String(first(obj(f.status)?.short, obj(f.status)?.name, f.status, f.state, "unknown"));
   const status = statusMap(rawStatus);
-  const homeScore = f.score?.home ?? f.home_score ?? home.score;
-  const awayScore = f.score?.away ?? f.away_score ?? away.score;
-  const hasScore = status === "finished" && Number.isInteger(homeScore) && homeScore >= 0 && Number.isInteger(awayScore) && awayScore >= 0;
+  const score = obj(f.score);
+  const homeScore = first(score?.home, f.home_score, obj(f.scores)?.home, home?.score);
+  const awayScore = first(score?.away, f.away_score, obj(f.scores)?.away, away?.score);
+  const hasScore = status === "finished" && Number.isInteger(homeScore) && Number(homeScore) >= 0 && Number.isInteger(awayScore) && Number(awayScore) >= 0;
+  const season = obj(f.season);
   return {
-    provider: NAME, providerFixtureId: String(fixtureId), kickoffUtc: kickoff,
-    home: { providerTeamId: String(home.id), name: String(home.name).trim() },
-    away: { providerTeamId: String(away.id), name: String(away.name).trim() },
+    provider: NAME, providerFixtureId: String(fixtureId).trim(), kickoffUtc: kickoff,
+    home: { providerTeamId: String(homeId), name: String(homeName).trim() },
+    away: { providerTeamId: String(awayId), name: String(awayName).trim() },
     competition: { providerCompetitionId: String(leagueId), name: String(leagueName).trim() },
-    ...(f.season?.id != null || f.season_id != null ? { providerSeasonId: String(f.season?.id ?? f.season_id) } : {}),
+    ...(season?.id != null || f.season_id != null ? { providerSeasonId: String(season?.id ?? f.season_id) } : {}),
     status, observedAt, evidenceState: "unverified", rawStatus,
-    ...(hasScore ? { score: { home: homeScore as number, away: awayScore as number } } : {}),
-    provenance: { provider: NAME, providerRecordId: String(fixtureId), retrievedAt: observedAt, evidenceState: "unverified" }
+    ...(hasScore ? { score: { home: Number(homeScore), away: Number(awayScore) } } : {}),
+    provenance: { provider: NAME, providerRecordId: String(fixtureId).trim(), retrievedAt: observedAt, evidenceState: "unverified" }
   };
 }
-
+function rejectionReason(raw: unknown): string {
+  const f = obj(raw);
+  if (!f) return "malformed_record";
+  const fixture = obj(f.fixture);
+  if (first(f.id, f.fixture_id, f.fixtureId, fixture?.id) == null) return "missing_fixture_id";
+  const teams = obj(f.teams);
+  const home = obj(first(f.home_team, f.homeTeam, f.home, teams?.home, fixture?.home_team));
+  const away = obj(first(f.away_team, f.awayTeam, f.away, teams?.away, fixture?.away_team));
+  if (!first(home?.id, home?.team_id, home?.teamId, f.home_team_id) ||
+      !first(away?.id, away?.team_id, away?.teamId, f.away_team_id) ||
+      !first(home?.name, home?.team_name, home?.teamName) ||
+      !first(away?.name, away?.team_name, away?.teamName)) return "missing_team";
+  const leagueRaw = first(f.league, f.competition, f.tournament, f.competition_name);
+  const league = obj(leagueRaw);
+  if (!first(league?.id, league?.league_id, league?.competition_id, f.league_id, f.competition_id, f.tournament_id) ||
+      !first(typeof leagueRaw === "string" ? leagueRaw : undefined, league?.name, league?.title, f.league_name, f.competition_name, f.tournament_name)) return "missing_competition";
+  if (!utc(first(f.kickoff_utc, f.kickoffUtc, f.kickoff_time_utc, f.kickoff, f.kickoffAt, f.datetime, f.date, fixture?.date, fixture?.kickoff))) return "invalid_kickoff";
+  return "malformed_record";
+}
 export class SportApiAiProvider implements FootballDataProvider {
   readonly name = NAME;
-  diagnostics() { return { ...diagnostics }; }
-
+  diagnostics() { return { ...diagnostics, ...(diagnostics.lastRejectionReasons ? { lastRejectionReasons: { ...diagnostics.lastRejectionReasons } } : {}), ...(diagnostics.lastResponseShape ? { lastResponseShape: { ...diagnostics.lastResponseShape, topLevelKeys: [...diagnostics.lastResponseShape.topLevelKeys] } } : {}) }; }
   async fetchFixtures(query: FixtureQuery, signal?: AbortSignal): Promise<ProviderFixtureCandidate[]> {
     const apiKey = key();
-    if (!apiKey) { diagnostics = { provider: NAME, state: "unavailable", lastRecordCount: 0, lastErrorCode: "credential_not_configured" }; return []; }
+    if (!apiKey) { diagnostics = { provider: NAME, state: "unavailable", lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0, lastErrorCode: "credential_not_configured" }; return []; }
     if (!/^\d{4}-\d{2}-\d{2}$/.test(query.dateFromUtc) || query.dateFromUtc !== query.dateToUtc || Number.isNaN(Date.parse(`${query.dateFromUtc}T00:00:00Z`)) || new Date(`${query.dateFromUtc}T00:00:00Z`).toISOString().slice(0, 10) !== query.dateFromUtc) {
-      diagnostics = { provider: NAME, state: "schema_error", lastAttemptAt: new Date().toISOString(), lastRecordCount: 0, lastErrorCode: "adapter_requires_single_utc_calendar_date" }; return [];
+      diagnostics = { provider: NAME, state: "schema_error", lastAttemptAt: new Date().toISOString(), lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0, lastErrorCode: "adapter_requires_single_utc_calendar_date" }; return [];
     }
     const attemptedAt = new Date().toISOString();
-    diagnostics = { provider: NAME, state: "requesting", lastAttemptAt: attemptedAt, lastRecordCount: 0 };
+    diagnostics = { provider: NAME, state: "requesting", lastAttemptAt: attemptedAt, lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0 };
     try {
       const response = await fetch(`${base()}/fixtures/date/${encodeURIComponent(query.dateFromUtc)}`, {
         headers: { "X-Api-Key": apiKey, Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
@@ -70,18 +122,40 @@ export class SportApiAiProvider implements FootballDataProvider {
       });
       if (!response.ok) {
         const state = response.status === 429 ? "rate_limited" : [401, 403].includes(response.status) ? "auth_error" : "http_error";
-        diagnostics = { provider: NAME, state, lastAttemptAt: attemptedAt, lastHttpStatus: response.status, lastRecordCount: 0, lastErrorCode: `http_${response.status}` };
+        diagnostics = { provider: NAME, state, lastAttemptAt: attemptedAt, lastHttpStatus: response.status, lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0, lastErrorCode: `http_${response.status}` };
         return [];
       }
-      const payload = await response.json() as any;
-      const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.fixtures) ? payload.fixtures : null;
-      if (!rows) { diagnostics = { provider: NAME, state: "schema_error", lastAttemptAt: attemptedAt, lastHttpStatus: response.status, lastRecordCount: 0, lastErrorCode: "fixture_array_missing" }; return []; }
+      const payload = await response.json() as unknown;
+      const parsed = envelope(payload);
+      if (!parsed.rows) {
+        diagnostics = { provider: NAME, state: "schema_error", lastAttemptAt: attemptedAt, lastHttpStatus: response.status, lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0, lastResponseShape: { topLevelKeys: parsed.topLevelKeys }, lastErrorCode: "fixture_array_missing" };
+        return [];
+      }
       const observedAt = new Date().toISOString();
-      const mapped = rows.map((row: unknown) => mapSportApiAiFixture(row, observedAt)).filter((row: ProviderFixtureCandidate | null): row is ProviderFixtureCandidate => row !== null);
-      diagnostics = { provider: NAME, state: mapped.length ? "success" : rows.length ? "partial" : "success_empty", lastAttemptAt: attemptedAt, lastSuccessAt: observedAt, lastHttpStatus: response.status, lastRecordCount: mapped.length, ...(rows.length !== mapped.length ? { lastErrorCode: "some_fixture_records_rejected" } : {}) };
-      return mapped.filter((f: ProviderFixtureCandidate) => !query.competitionIds?.length || query.competitionIds.includes(f.competition.providerCompetitionId));
+      const rejectionReasons: Record<string, number> = {};
+      const mapped: ProviderFixtureCandidate[] = [];
+      for (const row of parsed.rows) {
+        const candidate = mapSportApiAiFixture(row, observedAt);
+        if (candidate) mapped.push(candidate);
+        else {
+          const reason = rejectionReason(row);
+          rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
+        }
+      }
+      const filtered = mapped.filter(f => !query.competitionIds?.length || query.competitionIds.includes(f.competition.providerCompetitionId));
+      diagnostics = {
+        provider: NAME, state: parsed.rows.length === 0 ? "success_empty" : filtered.length ? (filtered.length + Object.values(rejectionReasons).reduce((a, b) => a + b, 0) === parsed.rows.length ? "success" : "partial") : "partial",
+        lastAttemptAt: attemptedAt, lastSuccessAt: observedAt, lastHttpStatus: response.status,
+        lastRecordCount: filtered.length, lastAcceptedCount: filtered.length,
+        lastRejectedCount: Object.values(rejectionReasons).reduce((a, b) => a + b, 0),
+        lastRejectionReasons: rejectionReasons, lastResponseShape: { topLevelKeys: parsed.topLevelKeys, rowCount: parsed.rows.length },
+        ...(Object.keys(rejectionReasons).length ? { lastErrorCode: "some_fixture_records_rejected" } : {})
+      };
+      return filtered;
     } catch (error) {
-      diagnostics = { provider: NAME, state: "request_error", lastAttemptAt: attemptedAt, lastRecordCount: 0, lastErrorCode: error instanceof Error && error.name === "TimeoutError" ? "request_timeout" : "network_or_parse_error" };
+      diagnostics = { provider: NAME, state: error instanceof Error && error.name === "TimeoutError" ? "request_error" : "request_error",
+        lastAttemptAt: attemptedAt, lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0,
+        lastErrorCode: error instanceof Error && error.name === "TimeoutError" ? "request_timeout" : "network_or_parse_error" };
       return [];
     }
   }
