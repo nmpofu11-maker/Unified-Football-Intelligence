@@ -29,3 +29,28 @@ test("Sportmonks accepts a score only when status is finished and both scores ar
   const raw = {id:56,starting_at:"2026-10-10 16:30:00",league:{id:9,name:"Example League"},state:{short_name:"FT"},participants:[{id:1,name:"Home FC",meta:{location:"home"}},{id:2,name:"Away FC",meta:{location:"away"}}],scores:[{participant_id:1,description:"CURRENT",score:{goals:2,participant:"home"}},{participant_id:2,description:"CURRENT",score:{goals:1,participant:"away"}}]};
   assert.deepEqual(mapSportmonksFixture(raw)?.score,{home:2,away:1});
 });
+
+test("Sportmonks halftime observation remains live and never settled", () => {
+  const raw = {
+    id: 19713909,
+    starting_at: "2026-10-12 17:00:00",
+    league: { id: 271, name: "Superliga" },
+    state: { short_name: "HT" },
+    participants: [
+      { id: 2905, name: "AGF", meta: { location: "home" } },
+      { id: 390, name: "Sønderjyske Fodbold", meta: { location: "away" } }
+    ],
+    scores: [
+      { participant_id: 2905, score: { goals: 1, participant: "home" } },
+      { participant_id: 390, score: { goals: 0, participant: "away" } }
+    ]
+  };
+  const mapped = mapSportmonksFixture(raw, "2026-10-12T18:04:25.867Z");
+  assert.equal(mapped?.providerFixtureId, "19713909");
+  assert.equal(mapped?.home.providerTeamId, "2905");
+  assert.equal(mapped?.away.providerTeamId, "390");
+  assert.equal(mapped?.competition.providerCompetitionId, "271");
+  assert.equal(mapped?.status, "live");
+  assert.equal(mapped?.score, undefined);
+  assert.equal(mapped?.evidenceState, "unverified");
+});
