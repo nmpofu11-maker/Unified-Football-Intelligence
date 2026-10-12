@@ -8,6 +8,10 @@ export interface ProviderDiagnostics {
   lastSuccessAt?: string;
   lastHttpStatus?: number;
   lastRecordCount: number;
+  lastAcceptedCount?: number;
+  lastRejectedCount?: number;
+  lastRejectionReasons?: Record<string, number>;
+  lastResponseShape?: { topLevelKeys: string[]; rowCount?: number };
   lastErrorCode?: string;
 }
 export interface FixtureQuery { dateFromUtc: string; dateToUtc: string; competitionIds?: string[]; }
