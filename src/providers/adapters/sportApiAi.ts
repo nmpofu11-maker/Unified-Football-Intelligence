@@ -59,14 +59,14 @@ export function mapSportApiAiFixture(raw: unknown, observedAt = new Date().toISO
   const fixtureId = first(f.id, f.fixture_id, f.fixtureId, fixture?.id);
   const homeId = first(home?.id, home?.team_id, home?.teamId, f.home_team_id);
   const awayId = first(away?.id, away?.team_id, away?.teamId, f.away_team_id);
-  const homeName = first(home?.name, home?.team_name, home?.teamName, typeof f.home_team === "string" ? f.home_team : undefined);
-  const awayName = first(away?.name, away?.team_name, away?.teamName, typeof f.away_team === "string" ? f.away_team : undefined);
+  const homeName = first(home?.name, home?.team_name, home?.teamName, typeof f.home_team === "string" ? f.home_team : undefined, typeof f.homeTeam === "string" ? f.homeTeam : undefined, typeof f.home === "string" ? f.home : undefined);
+  const awayName = first(away?.name, away?.team_name, away?.teamName, typeof f.away_team === "string" ? f.away_team : undefined, typeof f.awayTeam === "string" ? f.awayTeam : undefined, typeof f.away === "string" ? f.away : undefined);
   const leagueId = first(league?.id, league?.league_id, league?.competition_id, f.league_id, f.competition_id, f.tournament_id);
   const leagueName = first(typeof leagueRaw === "string" ? leagueRaw : undefined, league?.name, league?.title, f.league_name, f.competition_name, f.tournament_name);
-  const kickoff = utc(first(f.kickoff_utc, f.kickoffUtc, f.kickoff_time_utc, f.kickoff, f.kickoffAt, f.datetime, f.date, fixture?.date, fixture?.kickoff));
-  if (fixtureId == null || !String(fixtureId).trim() || homeId == null || awayId == null ||
+  const kickoff = utc(first(f.kickoff_utc, f.kickoffUtc, f.kickoff_time_utc, f.datetime, f.kickoff, f.kickoffAt, fixture?.kickoff, fixture?.date, f.date));
+  if (fixtureId == null || !String(fixtureId).trim() ||
       !String(homeName ?? "").trim() || !String(awayName ?? "").trim() ||
-      leagueId == null || !String(leagueName ?? "").trim() || !kickoff) return null;
+      !String(leagueName ?? "").trim() || !kickoff) return null;
   const rawStatus = String(first(obj(f.status)?.short, obj(f.status)?.name, f.status, f.state, "unknown"));
   const status = statusMap(rawStatus);
   const score = obj(f.score);
@@ -76,9 +76,9 @@ export function mapSportApiAiFixture(raw: unknown, observedAt = new Date().toISO
   const season = obj(f.season);
   return {
     provider: NAME, providerFixtureId: String(fixtureId).trim(), kickoffUtc: kickoff,
-    home: { providerTeamId: String(homeId), name: String(homeName).trim() },
-    away: { providerTeamId: String(awayId), name: String(awayName).trim() },
-    competition: { providerCompetitionId: String(leagueId), name: String(leagueName).trim() },
+    home: { ...(homeId != null ? { providerTeamId: String(homeId) } : {}), name: String(homeName).trim() },
+    away: { ...(awayId != null ? { providerTeamId: String(awayId) } : {}), name: String(awayName).trim() },
+    competition: { ...(leagueId != null ? { providerCompetitionId: String(leagueId) } : {}), name: String(leagueName).trim() },
     ...(season?.id != null || f.season_id != null ? { providerSeasonId: String(season?.id ?? f.season_id) } : {}),
     status, observedAt, evidenceState: "unverified", rawStatus,
     ...(hasScore ? { score: { home: Number(homeScore), away: Number(awayScore) } } : {}),
@@ -93,14 +93,12 @@ function rejectionReason(raw: unknown): string {
   const teams = obj(f.teams);
   const home = obj(first(f.home_team, f.homeTeam, f.home, teams?.home, fixture?.home_team));
   const away = obj(first(f.away_team, f.awayTeam, f.away, teams?.away, fixture?.away_team));
-  if (!first(home?.id, home?.team_id, home?.teamId, f.home_team_id) ||
-      !first(away?.id, away?.team_id, away?.teamId, f.away_team_id) ||
-      !first(home?.name, home?.team_name, home?.teamName) ||
-      !first(away?.name, away?.team_name, away?.teamName)) return "missing_team";
+  const homeName = first(home?.name, home?.team_name, home?.teamName, typeof f.home_team === "string" ? f.home_team : undefined, typeof f.homeTeam === "string" ? f.homeTeam : undefined, typeof f.home === "string" ? f.home : undefined);
+  const awayName = first(away?.name, away?.team_name, away?.teamName, typeof f.away_team === "string" ? f.away_team : undefined, typeof f.awayTeam === "string" ? f.awayTeam : undefined, typeof f.away === "string" ? f.away : undefined);
+  if (!homeName || !awayName) return "missing_team";
   const leagueRaw = first(f.league, f.competition, f.tournament, f.competition_name);
   const league = obj(leagueRaw);
-  if (!first(league?.id, league?.league_id, league?.competition_id, f.league_id, f.competition_id, f.tournament_id) ||
-      !first(typeof leagueRaw === "string" ? leagueRaw : undefined, league?.name, league?.title, f.league_name, f.competition_name, f.tournament_name)) return "missing_competition";
+  if (!first(typeof leagueRaw === "string" ? leagueRaw : undefined, league?.name, league?.title, f.league_name, f.competition_name, f.tournament_name)) return "missing_competition";
   if (!utc(first(f.kickoff_utc, f.kickoffUtc, f.kickoff_time_utc, f.kickoff, f.kickoffAt, f.datetime, f.date, fixture?.date, fixture?.kickoff))) return "invalid_kickoff";
   return "malformed_record";
 }
@@ -116,7 +114,9 @@ export class SportApiAiProvider implements FootballDataProvider {
     const attemptedAt = new Date().toISOString();
     diagnostics = { provider: NAME, state: "requesting", lastAttemptAt: attemptedAt, lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0 };
     try {
-      const response = await fetch(`${base()}/fixtures/date/${encodeURIComponent(query.dateFromUtc)}`, {
+      const url = new URL(`${base()}/fixtures`);
+      url.searchParams.set("date", query.dateFromUtc);
+      const response = await fetch(url, {
         headers: { "X-Api-Key": apiKey, Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
         signal: signal ?? AbortSignal.timeout(15_000)
       });
@@ -146,7 +146,7 @@ export class SportApiAiProvider implements FootballDataProvider {
       diagnostics = {
         provider: NAME, state: parsed.rows.length === 0 ? "success_empty" : filtered.length ? (filtered.length + Object.values(rejectionReasons).reduce((a, b) => a + b, 0) === parsed.rows.length ? "success" : "partial") : "partial",
         lastAttemptAt: attemptedAt, lastSuccessAt: observedAt, lastHttpStatus: response.status,
-        lastRecordCount: filtered.length, lastAcceptedCount: filtered.length,
+        lastRecordCount: parsed.rows.length, lastAcceptedCount: filtered.length,
         lastRejectedCount: Object.values(rejectionReasons).reduce((a, b) => a + b, 0),
         lastRejectionReasons: rejectionReasons, lastResponseShape: { topLevelKeys: parsed.topLevelKeys, rowCount: parsed.rows.length },
         ...(Object.keys(rejectionReasons).length ? { lastErrorCode: "some_fixture_records_rejected" } : {})
