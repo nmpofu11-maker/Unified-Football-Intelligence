@@ -4,11 +4,11 @@ These notes are based on inspected source adapters. They are not a guarantee of 
 
 ## SportAPI.ai — primary
 
-- Existing source client documents `GET https://sportapi.ai/api/fixtures/date/{YYYY-MM-DD}`.
+- Current public SportAPI documentation shows `GET https://sportapi.ai/api/fixtures?date=YYYY-MM-DD`. The adapter uses this documented query endpoint.
 - Authentication in the source adapter sends `X-Api-Key` and `Authorization: Bearer …` using `SPORTAPI_AI_KEY` (legacy alias `SPORTAPI_API_KEY`).
-- The inspected client accepts a top-level array, `data` array, or `fixtures` array.
+- The public example returns `{ success, fixtures: [...] }`; each row can contain `id`, `date`, `datetime`, `status`, string `league`, string `home_team`, and string `away_team`. The adapter also accepts supported array/data envelope variants.
 - The source adapter treats HTTP 429 as rate limiting and pauses requests. The new adapter records 429 separately from a valid empty response.
-- The new mapper requires a provider fixture ID, provider team IDs and names, competition ID/name, and an explicit UTC/offset kickoff timestamp. A date-only field plus timezone-naive time is rejected rather than guessed.
+- The mapper requires a provider fixture ID, team names, competition name, and explicit UTC/offset kickoff timestamp. Team and competition provider IDs are optional because the public example does not provide them; absent IDs remain absent and canonicalization must use exact reviewed names or remain blocked. A date-only field plus timezone-naive time is rejected rather than guessed.
 - Score values are exposed only for a finished-status record with valid non-negative integer scores; they remain unverified until result reconciliation.
 
 ## Sportmonks — primary
