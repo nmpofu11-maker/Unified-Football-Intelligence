@@ -34,6 +34,16 @@ test("SportAPI.ai maps an observed fixture and never fabricates missing values",
   assert.equal(mapSportApiAiFixture({ ...fixture, league: { name: "Example League" } }), null);
 });
 
+test("SportAPI.ai accepts documented SportAPI fixture shape with string team and league names", async () => {
+  const documented = { id: 45821, date: "2026-06-14", datetime: "2026-06-14T18:00:00Z", status: "Scheduled", league: "FIFA World Cup", home_team: "Brazil", away_team: "Mexico" };
+  await withMockedFetch({ success: true, fixtures: [documented] }, async provider => {
+    const results = await provider.fetchFixtures({ dateFromUtc: "2026-10-17", dateToUtc: "2026-10-17" });
+    assert.equal(results.length, 1);
+    assert.equal(provider.diagnostics().lastAcceptedCount, 1);
+    assert.equal(provider.diagnostics().lastRejectedCount, 0);
+  });
+});
+
 test("SportAPI.ai accepts supported envelope variants and records sanitized response shape", async () => {
   for (const payload of [
     [fixture],
