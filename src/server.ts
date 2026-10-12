@@ -21,7 +21,7 @@ const providerConfig = [
   { name: "api-football", env: "API_FOOTBALL_KEY", priority: "optional" }
 ] as const;
 
-const providerCache = new Map<string, { expiresAt: number; payload: unknown }>();
+const providerCache = new Map<string, { expiresAt: number; retrievedAt: string; payload: unknown }>();
 const requestWindows = new Map<string, number[]>();
 function safeTokenEquals(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
@@ -90,7 +90,7 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     return res.status(400).json({ state: "invalid_request", reason: "date_must_be_YYYY_MM_DD" });
   }
   const cached = providerCache.get(date);
-  if (cached && cached.expiresAt > now) return res.json({ ...(cached.payload as object), cache: "hit" });
+  if (cached && cached.expiresAt > now) return res.json({ ...(cached.payload as object), cache: "hit", cached: true, cachedAt: cached.retrievedAt });
   const query = { dateFromUtc: date, dateToUtc: date };
   const [sportApiAi, sportmonks] = await Promise.all([
     sportApiAiProvider.fetchFixtures(query), sportmonksProvider.fetchFixtures(query)
@@ -101,12 +101,13 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     note: "Provider candidates are unverified observations. Canonical team/competition resolution, conflict review and durable persistence are not yet connected.",
     candidateCount: sportApiAi.length + sportmonks.length, candidates: [...sportApiAi, ...sportmonks], providers
   };
-  providerCache.set(date, { expiresAt: now + 5 * 60_000, payload });
+  const retrievedAt = new Date().toISOString();
+  providerCache.set(date, { expiresAt: now + 5 * 60_000, retrievedAt, payload });
   if (providerCache.size > 100) {
     const oldestKey = providerCache.keys().next().value;
     if (oldestKey) providerCache.delete(oldestKey);
   }
-  return res.json({ ...payload, cache: "miss" });
+  return res.json({ ...payload, cache: "miss", cached: false, retrievedAt });
 });
 
 
