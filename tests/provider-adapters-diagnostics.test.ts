@@ -73,3 +73,13 @@ test("SportAPI.ai HTTP failures end in a terminal diagnostic state", async () =>
     assert.equal(provider.diagnostics().lastHttpStatus, 401);
   }, 401);
 });
+
+test("concurrent SportAPI.ai calls both settle with terminal diagnostics", async () => {
+  await withMockedFetch({ data: [fixture] }, async provider => {
+    const query = { dateFromUtc: "2026-10-17", dateToUtc: "2026-10-17" };
+    const [first, second] = await Promise.all([provider.fetchFixtures(query), provider.fetchFixtures(query)]);
+    assert.equal(first.length, 1);
+    assert.equal(second.length, 1);
+    assert.notEqual(provider.diagnostics().state, "requesting");
+  });
+});
