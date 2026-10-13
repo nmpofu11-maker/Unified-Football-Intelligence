@@ -151,7 +151,7 @@ export class SportmonksProvider implements FootballDataProvider {
         .filter(f => !query.competitionIds?.length || (f.competition.providerCompetitionId !== undefined && query.competitionIds.includes(f.competition.providerCompetitionId)));
       diagnostics = {
         provider: NAME,
-        state: batch.partial || batch.errorCode || mapped.length !== batch.rows.length ? "partial" : mapped.length ? "success" : "success_empty",
+        state: batch.partial || (batch.errorCode && !batch.errorCode.startsWith("empty_")) || mapped.length !== batch.rows.length ? "partial" : mapped.length ? "success" : "success_empty",
         lastAttemptAt: attemptedAt, lastSuccessAt: observedAt,
         ...(batch.status === undefined ? {} : { lastHttpStatus: batch.status }),
         lastRecordCount: batch.rows.length, lastAcceptedCount: mapped.length, lastRejectedCount: batch.rows.length - mapped.length,
