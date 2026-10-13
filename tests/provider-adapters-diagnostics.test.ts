@@ -66,6 +66,18 @@ test("SportAPI.ai accepts supported envelope variants and records sanitized resp
   }
 });
 
+test("SportAPI.ai explains non-fixture message envelopes without exposing URI query secrets", async () => {
+  await withMockedFetch({ message: "Endpoint requires a different plan", uri: "https://sportapi.ai/api/fixtures?token=do-not-expose" }, async provider => {
+    assert.deepEqual(await provider.fetchFixtures({ dateFromUtc: "2026-10-17", dateToUtc: "2026-10-17" }), []);
+    const diagnostic = provider.diagnostics();
+    assert.equal(diagnostic.state, "schema_error");
+    assert.equal(diagnostic.lastErrorCode, "provider_message_response");
+    assert.equal(diagnostic.lastResponseShape?.message, "Endpoint requires a different plan");
+    assert.equal(diagnostic.lastResponseShape?.uriPath, "/api/fixtures");
+    assert.equal(JSON.stringify(diagnostic).includes("do-not-expose"), false);
+  });
+});
+
 test("SportAPI.ai distinguishes empty responses from rejected records", async () => {
   await withMockedFetch({ data: [] }, async provider => {
     assert.deepEqual(await provider.fetchFixtures({ dateFromUtc: "2026-10-17", dateToUtc: "2026-10-17" }), []);
