@@ -31,9 +31,11 @@ test("candidate reconciliation only corroborates exact normalized identities acr
 });
 
 test("candidate reconciliation flags provider status and score disagreements", () => {
+  const scheduledWithoutScore = candidate({ provider: "api-football", providerFixtureId: "two", status: "scheduled" });
+  delete scheduledWithoutScore.score;
   const result = previewCandidateReconciliation([
     candidate({ status: "finished", score: { home: 1, away: 0 } }),
-    candidate({ provider: "api-football", providerFixtureId: "two", status: "scheduled", score: undefined })
+    scheduledWithoutScore
   ]);
   assert.equal(result[0]?.state, "conflicted");
   assert.ok(result[0]?.reasons.includes("provider_status_disagreement"));
