@@ -99,9 +99,10 @@ export class ApiFootballProvider implements FootballDataProvider {
       const payload = obj(await response.json());
       const rows = payload && Array.isArray(payload.response) ? payload.response : null;
       const topLevelKeys = payload ? Object.keys(payload).sort().slice(0, 30) : ["<non-object>"];
-      const errorKeys = payload && payload.errors && typeof payload.errors === "object"
-        ? Object.keys(payload.errors).filter(k => k.toLowerCase() !== "token").slice(0, 8) : [];
-      if (errorKeys.length || (payload?.errors && Array.isArray(payload.errors) && payload.errors.length)) {
+      const hasProviderErrors = Array.isArray(payload?.errors)
+        ? payload.errors.length > 0
+        : Boolean(payload?.errors && typeof payload.errors === "object" && Object.keys(payload.errors).length > 0);
+      if (hasProviderErrors) {
         diagnostics = {
           provider: NAME, state: "schema_error", lastAttemptAt: attemptedAt, lastHttpStatus: response.status,
           lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0,
