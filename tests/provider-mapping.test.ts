@@ -22,7 +22,9 @@ test("SportAPI.ai mapping requires timezone-explicit kickoff", () => {
   assert.equal(mapped?.evidenceState, "unverified");
   assert.equal(mapSportApiAiFixture({...base, home_team:{id:1,name:"Home FC",score:2}, away_team:{id:2,name:"Away FC",score:0}})?.score, undefined);
   assert.equal(mapSportApiAiFixture({...base, date:"2026-10-17", kickoff_time:"16:30"}), null);
-  assert.equal(mapSportApiAiFixture({...base, home_team:{name:"Home FC"}}), null);
+  const withoutHomeProviderId = mapSportApiAiFixture({...base, home_team:{name:"Home FC"}});
+  assert.equal(withoutHomeProviderId?.home.name, "Home FC");
+  assert.equal(withoutHomeProviderId?.home.providerTeamId, undefined);
 });
 
 test("Sportmonks mapping preserves provider IDs and never treats scheduled scores as final", () => {
