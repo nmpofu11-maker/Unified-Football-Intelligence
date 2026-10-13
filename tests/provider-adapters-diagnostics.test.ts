@@ -30,8 +30,12 @@ async function withMockedFetch(payload: unknown, fn: (provider: SportApiAiProvid
 test("SportAPI.ai maps an observed fixture and never fabricates missing values", () => {
   assert.equal(mapSportApiAiFixture(fixture)?.providerFixtureId, "123");
   assert.equal(mapSportApiAiFixture({ ...fixture, date: "2026-10-17T16:30:00" }), null);
-  assert.equal(mapSportApiAiFixture({ ...fixture, home_team: { name: "Home FC" } }), null);
-  assert.equal(mapSportApiAiFixture({ ...fixture, league: { name: "Example League" } }), null);
+  const withoutHomeProviderId = mapSportApiAiFixture({ ...fixture, home_team: { name: "Home FC" } });
+  assert.equal(withoutHomeProviderId?.home.name, "Home FC");
+  assert.equal(withoutHomeProviderId?.home.providerTeamId, undefined);
+  const withoutCompetitionProviderId = mapSportApiAiFixture({ ...fixture, league: { name: "Example League" } });
+  assert.equal(withoutCompetitionProviderId?.competition.name, "Example League");
+  assert.equal(withoutCompetitionProviderId?.competition.providerCompetitionId, undefined);
 });
 
 test("SportAPI.ai accepts documented SportAPI fixture shape with string team and league names", async () => {
