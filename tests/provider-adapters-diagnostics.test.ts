@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { SportApiAiProvider, mapSportApiAiFixture } from "../src/providers/adapters/sportApiAi.js";
+import { SportmonksProvider } from "../src/providers/adapters/sportmonks.js";
 
 const fixture = {
   id: 123,
@@ -108,4 +109,35 @@ test("concurrent SportAPI.ai calls both settle with terminal diagnostics", async
     assert.equal(second.length, 1);
     assert.notEqual(provider.diagnostics().state, "requesting");
   });
+});
+
+
+test("Sportmonks uses documented api_token authentication and supported page size", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousKey = process.env.SPORTMONKS_API_KEY;
+  const previousBase = process.env.SPORTMONKS_BASE_URL;
+  process.env.SPORTMONKS_API_KEY = "test-key-not-a-real-secret";
+  delete process.env.SPORTMONKS_BASE_URL;
+  let requestedUrl: URL | undefined;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requestedUrl = new URL(String(input));
+    return new Response(JSON.stringify({ data: [], message: "No fixtures for this date" }), {
+      status: 200, headers: { "content-type": "application/json" }
+    });
+  }) as typeof fetch;
+  try {
+    const provider = new SportmonksProvider();
+    assert.deepEqual(await provider.fetchFixtures({ dateFromUtc: "2026-10-13", dateToUtc: "2026-10-13" }), []);
+    assert.equal(requestedUrl?.searchParams.get("api_token"), "test-key-not-a-real-secret");
+    assert.equal(requestedUrl?.searchParams.get("per_page"), "50");
+    assert.equal(provider.diagnostics().state, "success_empty");
+    assert.equal(provider.diagnostics().lastResponseShape?.message, "No fixtures for this date");
+    assert.equal(JSON.stringify(provider.diagnostics()).includes("test-key-not-a-real-secret"), false);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.SPORTMONKS_API_KEY;
+    else process.env.SPORTMONKS_API_KEY = previousKey;
+    if (previousBase === undefined) delete process.env.SPORTMONKS_BASE_URL;
+    else process.env.SPORTMONKS_BASE_URL = previousBase;
+  }
 });
