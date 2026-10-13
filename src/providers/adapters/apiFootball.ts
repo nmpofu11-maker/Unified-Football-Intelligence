@@ -127,7 +127,21 @@ export class ApiFootballProvider implements FootballDataProvider {
       };
       return mapped.filter(f => !query.competitionIds?.length || (f.competition.providerCompetitionId !== undefined && query.competitionIds.includes(f.competition.providerCompetitionId)));
     } catch (error) {
-      diagnostics = { provider: NAME, state: "request_error", lastAttemptAt: attemptedAt, lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0, lastErrorCode: error instanceof Error && error.name === "TimeoutError" ? "request_timeout" : "network_or_parse_error" };
+      // Keep diagnostics actionable without returning raw exception messages, URLs,
+      // response bodies, request headers, or any credential-bearing details.
+      const errorName = error instanceof Error ? error.name : "";
+      const causeCode = obj(error)?.cause && obj(obj(error)?.cause)?.code;
+      const safeNetworkCodes = new Set([
+        "ECONNREFUSED", "ECONNRESET", "ENOTFOUND", "EAI_AGAIN",
+        "ETIMEDOUT", "EHOSTUNREACH", "ENETUNREACH", "UND_ERR_CONNECT_TIMEOUT"
+      ]);
+      const errorCode =
+        errorName === "TimeoutError" || errorName === "AbortError" ? "request_timeout" :
+        errorName === "SyntaxError" ? "malformed_json" :
+        typeof causeCode === "string" && safeNetworkCodes.has(causeCode) ? `network_${causeCode.toLowerCase()}` :
+        errorName === "TypeError" ? "network_fetch_failed" :
+        "request_failed";
+      diagnostics = { provider: NAME, state: "request_error", lastAttemptAt: attemptedAt, lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0, lastErrorCode: errorCode };
       return [];
     }
   }
