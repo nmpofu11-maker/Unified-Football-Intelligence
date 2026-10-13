@@ -77,7 +77,7 @@ export class SportmonksProvider implements FootballDataProvider {
   async fetchFixtures(query: FixtureQuery, signal?: AbortSignal): Promise<ProviderFixtureCandidate[]> {
     const apiKey = key();
     if (!apiKey) { diagnostics = { provider: NAME, state: "unavailable", lastRecordCount: 0, lastErrorCode: "credential_not_configured" }; return []; }
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(query.dateFromUtc) || query.dateFromUtc !== query.dateToUtc || Number.isNaN(Date.parse(`${query.dateFromUtc}T00:00:00Z`)) || new Date(`${query.dateFromUtc}T00:00:00Z`).toISOString().slice(0, 10) !== query.dateFromUtc) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(query.dateFromUtc) || query.dateFromUtc !== query.dateToUtc || Number.isNaN(Date.parse(`${query.dateFromUtc}T00:00:00Z`)) || new Date(`${query.dateFromUtc}T00:00:00Z`).toISOString().slice(0, 10) !== query.dateFromUtc) {
       diagnostics = { provider: NAME, state: "schema_error", lastAttemptAt: new Date().toISOString(), lastRecordCount: 0, lastErrorCode: "adapter_requires_single_utc_calendar_date" }; return [];
     }
     const attemptedAt = new Date().toISOString();
@@ -108,7 +108,7 @@ export class SportmonksProvider implements FootballDataProvider {
         }
         const payload = await response.json() as any;
         topLevelKeys = payload && typeof payload === "object" && !Array.isArray(payload) ? Object.keys(payload).sort().slice(0, 30) : ["<non-object>"];
-        message = typeof payload?.message === "string" ? payload.message.replace(/\\s+/g, " ").slice(0, 160) : undefined;
+        message = typeof payload?.message === "string" ? payload.message.replace(/\s+/g, " ").slice(0, 160) : undefined;
         if (!Array.isArray(payload?.data)) return { rows, status, topLevelKeys, message, partial: true, endpoint, errorCode: "fixture_array_missing" };
         rows.push(...payload.data);
         const hasMore = payload?.pagination?.has_more === true || payload?.pagination?.hasMore === true || payload?.meta?.pagination?.has_more === true;
