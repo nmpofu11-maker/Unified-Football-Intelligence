@@ -111,7 +111,7 @@ export class SportmonksProvider implements FootballDataProvider {
       }
       const observedAt = new Date().toISOString();
       const mapped = all.map(row => mapSportmonksFixture(row, observedAt)).filter((row): row is ProviderFixtureCandidate => row !== null)
-        .filter(f => !query.competitionIds?.length || query.competitionIds.includes(f.competition.providerCompetitionId));
+        .filter(f => !query.competitionIds?.length || (f.competition.providerCompetitionId !== undefined && query.competitionIds.includes(f.competition.providerCompetitionId)));
       diagnostics = { provider: NAME, state: partial ? "partial" : mapped.length ? "success" : all.length ? "partial" : "success_empty", lastAttemptAt: attemptedAt, lastSuccessAt: observedAt, ...(lastStatus === undefined ? {} : { lastHttpStatus: lastStatus }), lastRecordCount: mapped.length, ...(partial || mapped.length !== all.length ? { lastErrorCode: "pagination_or_schema_incomplete" } : {}) };
       return mapped;
     } catch (error) {
