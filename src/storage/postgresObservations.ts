@@ -72,7 +72,7 @@ async function ensureSchema(client: PoolClient): Promise<void> {
       observation JSONB NOT NULL,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT provider_fixture_observations_score_pair CHECK (
-        (score_home IS NULL AND score_away IS NULL) OR (score_home >= 0 AND score_away >= 0)
+        (score_home IS NULL AND score_away IS NULL) OR (score_home IS NOT NULL AND score_away IS NOT NULL AND score_home >= 0 AND score_away >= 0)
       ),
       CONSTRAINT provider_fixture_observations_identity UNIQUE (provider, provider_fixture_id, observed_at)
     )
@@ -123,11 +123,10 @@ export async function persistProviderObservations(
       errorCode: "observation_validation_failed"
     };
   }
-  const client = await configuredPool.connect().catch(error => {
-    throw error;
-  });
+  let client: PoolClient | undefined;
   let inserted = 0;
   try {
+    client = await configuredPool.connect();
     await client.query("BEGIN");
     await ensureSchema(client);
     for (const candidate of valid) {
@@ -156,23 +155,22 @@ export async function persistProviderObservations(
       duplicatesSkipped: valid.length - inserted
     };
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
+    if (client) await client.query("ROLLBACK").catch(() => undefined);
     return {
       state: "error", received: candidates.length, inserted: 0, duplicatesSkipped: 0,
       errorCode: safeErrorCode(error)
     };
   } finally {
-    client.release();
+    client?.release();
   }
 }
 
 export async function getObservationStoreStatus(): Promise<ObservationStoreStatus> {
   const configuredPool = getPool();
   if (!configuredPool) return { configured: false, state: "not_configured" };
-  const client = await configuredPool.connect().catch(error => {
-    throw error;
-  });
+  let client: PoolClient | undefined;
   try {
+    client = await configuredPool.connect();
     await ensureSchema(client);
     const result = await client.query<{ count: number }>(
       "SELECT COUNT(*)::integer AS count FROM provider_fixture_observations"
@@ -181,6 +179,6 @@ export async function getObservationStoreStatus(): Promise<ObservationStoreStatu
   } catch (error) {
     return { configured: true, state: "error", errorCode: safeErrorCode(error) };
   } finally {
-    client.release();
+    client?.release();
   }
 }
