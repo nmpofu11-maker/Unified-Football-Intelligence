@@ -181,3 +181,33 @@ test("SportAPI.ai requests the documented fixtures-by-date route", async () => {
     else process.env.SPORTAPI_AI_BASE_URL = previousBase;
   }
 });
+
+
+test("SportAPI.ai rejects timezone-naive kickoff values instead of guessing UTC", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousKey = process.env.SPORTAPI_AI_KEY;
+  process.env.SPORTAPI_AI_KEY = "test-key-not-a-real-secret";
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    success: true,
+    date: "2026-10-13",
+    data: [{
+      id: 991,
+      datetime: "2026-10-13 17:00:00",
+      status: "Scheduled",
+      league_name: "Example League",
+      home_team: "Home FC",
+      away_team: "Away FC"
+    }]
+  }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
+  try {
+    const provider = new SportApiAiProvider();
+    assert.deepEqual(await provider.fetchFixtures({ dateFromUtc: "2026-10-13", dateToUtc: "2026-10-13" }), []);
+    assert.equal(provider.diagnostics().state, "partial");
+    assert.equal(provider.diagnostics().lastRejectedCount, 1);
+    assert.deepEqual(provider.diagnostics().lastRejectionReasons, { invalid_kickoff: 1 });
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.SPORTAPI_AI_KEY;
+    else process.env.SPORTAPI_AI_KEY = previousKey;
+  }
+});
