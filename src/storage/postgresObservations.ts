@@ -184,3 +184,66 @@ export async function getObservationStoreStatus(): Promise<ObservationStoreStatu
     client?.release();
   }
 }
+
+export interface ObservationStoreSummary {
+  configured: boolean;
+  state: "ready" | "not_configured" | "error";
+  totalObservations?: number;
+  unverifiedObservations?: number;
+  firstObservedAt?: string | null;
+  lastObservedAt?: string | null;
+  byProvider?: Array<{ provider: string; observations: number; lastObservedAt: string | null }>;
+  byStatus?: Array<{ status: string; observations: number }>;
+  errorCode?: string;
+}
+
+/** Read-only aggregate diagnostics; never returns raw fixture payloads or credentials. */
+export async function getObservationStoreSummary(): Promise<ObservationStoreSummary> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { configured: false, state: "not_configured" };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const totals = await client.query<{
+      total: number; unverified: number; first_observed_at: Date | null; last_observed_at: Date | null;
+    }>(`
+      SELECT COUNT(*)::integer AS total,
+             COUNT(*) FILTER (WHERE evidence_state = 'unverified')::integer AS unverified,
+             MIN(observed_at) AS first_observed_at,
+             MAX(observed_at) AS last_observed_at
+      FROM provider_fixture_observations
+    `);
+    const providers = await client.query<{
+      provider: string; observations: number; last_observed_at: Date | null;
+    }>(`
+      SELECT provider, COUNT(*)::integer AS observations, MAX(observed_at) AS last_observed_at
+      FROM provider_fixture_observations
+      GROUP BY provider ORDER BY provider
+    `);
+    const statuses = await client.query<{ status: string; observations: number }>(`
+      SELECT status, COUNT(*)::integer AS observations
+      FROM provider_fixture_observations
+      GROUP BY status ORDER BY status
+    `);
+    const total = totals.rows[0];
+    return {
+      configured: true,
+      state: "ready",
+      totalObservations: total?.total ?? 0,
+      unverifiedObservations: total?.unverified ?? 0,
+      firstObservedAt: total?.first_observed_at?.toISOString() ?? null,
+      lastObservedAt: total?.last_observed_at?.toISOString() ?? null,
+      byProvider: providers.rows.map(row => ({
+        provider: row.provider,
+        observations: row.observations,
+        lastObservedAt: row.last_observed_at?.toISOString() ?? null
+      })),
+      byStatus: statuses.rows.map(row => ({ status: row.status, observations: row.observations }))
+    };
+  } catch (error) {
+    return { configured: true, state: "error", errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
