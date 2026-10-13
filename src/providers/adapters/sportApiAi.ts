@@ -142,7 +142,7 @@ export class SportApiAiProvider implements FootballDataProvider {
           rejectionReasons[reason] = (rejectionReasons[reason] ?? 0) + 1;
         }
       }
-      const filtered = mapped.filter(f => !query.competitionIds?.length || query.competitionIds.includes(f.competition.providerCompetitionId));
+      const filtered = mapped.filter(f => !query.competitionIds?.length || (f.competition.providerCompetitionId !== undefined && query.competitionIds.includes(f.competition.providerCompetitionId)));
       diagnostics = {
         provider: NAME, state: parsed.rows.length === 0 ? "success_empty" : filtered.length ? (filtered.length + Object.values(rejectionReasons).reduce((a, b) => a + b, 0) === parsed.rows.length ? "success" : "partial") : "partial",
         lastAttemptAt: attemptedAt, lastSuccessAt: observedAt, lastHttpStatus: response.status,
