@@ -1,0 +1,647 @@
+{
+  "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+  "count": 80,
+  "warning": "Names are preserved verbatim. Provider IDs, aliases, league mappings and history are intentionally not guessed. mappingState=unresolved until reviewed canonical identity mapping is completed.",
+  "teams": [
+    {
+      "id": "legacy-team-001",
+      "canonicalName": "Ahlafors IF",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-002",
+      "canonicalName": "Almaz Antey Youth",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-003",
+      "canonicalName": "Atletico Nacional Medellin (W)",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-004",
+      "canonicalName": "Azam",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-005",
+      "canonicalName": "Baerum U19",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-006",
+      "canonicalName": "BE1 NFA",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-007",
+      "canonicalName": "Beijing Guoan",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-008",
+      "canonicalName": "Benfica U19",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-009",
+      "canonicalName": "BK Forward",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-010",
+      "canonicalName": "Bolivar",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-011",
+      "canonicalName": "Boston River Reserve",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-012",
+      "canonicalName": "Club Brugge",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-013",
+      "canonicalName": "Dinamo Zagreb",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-014",
+      "canonicalName": "Dnepr Mogilev",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-015",
+      "canonicalName": "Ekenas IF Fotbolll",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-016",
+      "canonicalName": "FC Dinamo City",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-017",
+      "canonicalName": "FC Flora Tallinn",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-018",
+      "canonicalName": "FC Gomel",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-019",
+      "canonicalName": "FC Iberia 1999 Tbilisi",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-020",
+      "canonicalName": "FC Nantes",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-021",
+      "canonicalName": "FC Noah",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-022",
+      "canonicalName": "FC Nomme United",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-023",
+      "canonicalName": "FC Pyunik",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-024",
+      "canonicalName": "FC Ulaanbaatar",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-025",
+      "canonicalName": "Fotbal Club FCSB",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-026",
+      "canonicalName": "Fram Reykjavik",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-027",
+      "canonicalName": "France U16",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-028",
+      "canonicalName": "Gnistan Helsinki",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-029",
+      "canonicalName": "Haugesund B",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-030",
+      "canonicalName": "Hunters FC",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-031",
+      "canonicalName": "Inter Milan Women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-032",
+      "canonicalName": "Japan U16",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-033",
+      "canonicalName": "Johor Darul Ta'zim FC",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-034",
+      "canonicalName": "KF Laci",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-035",
+      "canonicalName": "Lillestrom B",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-036",
+      "canonicalName": "Linfield Women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-037",
+      "canonicalName": "Lorenskog U19",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-038",
+      "canonicalName": "Madura United",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-039",
+      "canonicalName": "MC Oran",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-040",
+      "canonicalName": "FK Mladost DG",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-041",
+      "canonicalName": "Mohun Bagan Super Giant",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-042",
+      "canonicalName": "Napoli",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-043",
+      "canonicalName": "NEC Nijmegen",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-044",
+      "canonicalName": "MSK Zilina",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-045",
+      "canonicalName": "Nacional De Football Women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-046",
+      "canonicalName": "Pattani",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-047",
+      "canonicalName": "Penarol Reserve",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-048",
+      "canonicalName": "Peru Women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-049",
+      "canonicalName": "Poland Women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-050",
+      "canonicalName": "PVF-CAND FC",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-051",
+      "canonicalName": "Qingdao Team",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-052",
+      "canonicalName": "Qviding FIF",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-053",
+      "canonicalName": "RC Sporting Charleroi",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-054",
+      "canonicalName": "Real Cartagena",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-055",
+      "canonicalName": "Riga FC",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-056",
+      "canonicalName": "Rigas Futbola Skola",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-057",
+      "canonicalName": "Rijeka",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-058",
+      "canonicalName": "Rosenborg BK Women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-059",
+      "canonicalName": "FK Rostov Youth",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-060",
+      "canonicalName": "Saldus SS/Leevon",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-061",
+      "canonicalName": "Shanghai Port",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-062",
+      "canonicalName": "Shanghai Shenhua",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-063",
+      "canonicalName": "Shelbourne Women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-064",
+      "canonicalName": "Sligo Rovers Women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-065",
+      "canonicalName": "Slovan Ljubljana",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-066",
+      "canonicalName": "Smedby AIS",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-067",
+      "canonicalName": "St Johnstone F.C.",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-068",
+      "canonicalName": "St. Patrick's Athletic",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-069",
+      "canonicalName": "Stenungsunds IF",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-070",
+      "canonicalName": "Tabor Sezana",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-071",
+      "canonicalName": "Tabora United FC",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-072",
+      "canonicalName": "Taftea IK",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-073",
+      "canonicalName": "Truong Tuoi Dong Nai",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-074",
+      "canonicalName": "Tvaakers IF",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-075",
+      "canonicalName": "Uruguay",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-076",
+      "canonicalName": "Us Pergolettese",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-077",
+      "canonicalName": "Viimsi JK",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-078",
+      "canonicalName": "Vorup FB",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-079",
+      "canonicalName": "Wolfsberger AC Amateure",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-080",
+      "canonicalName": "ZNK Agram (w)",
+      "aliases": [],
+      "providerIds": {},
+      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "mappingState": "unresolved"
+    }
+  ]
+}

@@ -8,11 +8,15 @@ export interface ProviderDiagnostics {
   lastSuccessAt?: string;
   lastHttpStatus?: number;
   lastRecordCount: number;
+  lastAcceptedCount?: number;
+  lastRejectedCount?: number;
+  lastRejectionReasons?: Record<string, number>;
+  lastResponseShape?: { topLevelKeys: string[]; rowCount?: number; message?: string; uriPath?: string };
   lastErrorCode?: string;
 }
 export interface FixtureQuery { dateFromUtc: string; dateToUtc: string; competitionIds?: string[]; }
-export interface ProviderTeamCandidate { providerTeamId: string; name: string; }
-export interface ProviderCompetitionCandidate { providerCompetitionId: string; name: string; }
+export interface ProviderTeamCandidate { providerTeamId?: string; name: string; }
+export interface ProviderCompetitionCandidate { providerCompetitionId?: string; name: string; }
 /** Provider observation before canonical identity mapping; it is never a canonical fixture by itself. */
 export interface ProviderFixtureCandidate {
   provider: string;

@@ -15,18 +15,19 @@ Monitor broadly, build deeper verified histories for the original 80 priority te
 
 - Canonical domain types and validation for fixtures, settled results, forecasts and odds.
 - Conservative team/competition identity resolution: provider IDs must agree with names; unknown or ambiguous names are blocked rather than fuzzy-matched.
-- SportAPI.ai and Sportmonks on-demand fixture adapters with separate diagnostics for empty success, partial data, rate limits, authentication errors, malformed payloads and network errors.
-- An API endpoint `/api/providers/fixtures?date=YYYY-MM-DD` that returns raw-normalized provider observations as **unverified candidates**, not as persisted verified fixtures.
+- SportAPI.ai, Sportmonks and API-Football on-demand fixture adapters with separate diagnostics for empty success, partial data, rate limits, authentication errors, malformed payloads and network errors.
+- An API endpoint `/api/providers/fixtures?date=YYYY-MM-DD` that returns raw-normalized provider observations as **unverified candidates**.
+- A conservative cross-provider reconciliation preview; it does not create canonical fixtures or verify results.
+- PostgreSQL-backed append-only storage for valid provider observations marked `unverified`, with deduplication and provenance. The database must be configured and verified at runtime before this path can save records.
 - A transparent Poisson baseline that uses only verified, settled historical results strictly before the prediction cutoff and abstains when minimum history is missing.
 - A separate odds/value assessment that withholds betting recommendations for uncalibrated forecasts, stale/missing odds or mismatched fixtures.
 - Seeded verbatim list of the original 80 tracked-team names at `src/data/initial-tracked-teams.json`. Provider IDs and aliases are intentionally unresolved rather than guessed.
-- Draft PostgreSQL schema, provider contract notes, persistence plan, initial dashboard, and CI workflow.
 
 ## Not yet production-ready
 
-- PostgreSQL schema is not applied; no database repository/migrations or durable write path is connected.
-- Provider requests have not been verified against live credentials from this environment. No verified canonical fixtures or results are currently stored.
-- The original 80 names still need reviewed provider-ID/competition mappings. A name list is not verified match history.
+- No database connection has yet been verified in the target environment. `DATABASE_URL` being present is not enough; `/api/storage/status` must report `state: "ready"`, and an ingestion/restart test must confirm durable rows.
+- No verified canonical fixtures or settled results are currently stored. Provider observations and reconciliation groups are not verified evidence.
+- The original 80 names still need reviewed provider-ID and competition mappings. A name list is not verified match history.
 - Historical result backfill, immutable prediction ledger, chronological backtesting, calibration, odds ingestion, TheRundown integration, authentication and production deployment are not complete.
 - Betting recommendations remain disabled. The Poisson baseline is exploratory and not a calibrated betting model.
 
@@ -42,6 +43,6 @@ npm run build
 npm run dev
 ```
 
-Copy `.env.example` to `.env`. Never commit `.env` or paste API secrets into chat. The core server can start without Gemini; no Gemini key is required.
+Copy `.env.example` to `.env`. Set `DATABASE_URL` to a PostgreSQL connection URL only when you have a database provisioned. Never commit `.env` or paste API/database secrets into chat. The core server can start without Gemini; no Gemini key is required.
 
-See `docs/NEW_REPO_SETUP.md` for the separate GitHub repository setup steps. See `docs/ARCHITECTURE.md`, `docs/BUILD_PLAN.md`, `docs/DATA_INTEGRITY.md`, `docs/PROVIDER_CONTRACTS.md`, `docs/PERSISTENCE.md`, `docs/SOURCE_AUDIT.md`, and `docs/STATUS.md`.
+See `docs/POSTGRES_SETUP.md` for configuring and verifying durable storage. See `docs/NEW_REPO_SETUP.md` for the separate GitHub repository setup steps. See `docs/ARCHITECTURE.md`, `docs/BUILD_PLAN.md`, `docs/DATA_INTEGRITY.md`, `docs/PROVIDER_CONTRACTS.md`, `docs/PERSISTENCE.md`, `docs/SOURCE_AUDIT.md`, and `docs/STATUS.md`.
