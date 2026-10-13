@@ -8,7 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { getObservationStoreStatus, persistProviderObservations } from "./storage/postgresObservations.js";
+import { getObservationStoreStatus, getObservationStoreSummary, persistProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -67,6 +67,10 @@ app.get("/api/status", (_req: Request, res: Response) => res.json({
 app.get("/api/storage/status", async (_req: Request, res: Response) => {
   const status = await getObservationStoreStatus();
   res.status(status.state === "error" ? 503 : 200).json(status);
+});
+app.get("/api/storage/observations/summary", async (_req: Request, res: Response) => {
+  const summary = await getObservationStoreSummary();
+  res.status(summary.state === "error" ? 503 : 200).json(summary);
 });
 app.get("/api/providers/status", (_req: Request, res: Response) => {
   const providers = providerStatus();
