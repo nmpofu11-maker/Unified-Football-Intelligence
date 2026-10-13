@@ -92,7 +92,11 @@ export class SportmonksProvider implements FootballDataProvider {
         const url = new URL(`${base()}/fixtures/date/${encodeURIComponent(query.dateFromUtc)}`);
         url.searchParams.set("include", "participants;scores;league;state;season");
         url.searchParams.set("timezone", "UTC");
-        url.searchParams.set("per_page", "100");
+        url.searchParams.set("per_page", "50");
+        // Sportmonks documents api_token query authentication. Keep the header as
+        // well for compatibility, but use the documented token parameter as the
+        // authoritative authentication path.
+        url.searchParams.set("api_token", apiKey);
         url.searchParams.set("page", String(page));
         const response = await fetch(url, { headers: { Authorization: apiKey, Accept: "application/json" }, signal: signal ?? AbortSignal.timeout(15_000) });
         lastStatus = response.status;
