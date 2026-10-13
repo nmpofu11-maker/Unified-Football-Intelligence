@@ -104,18 +104,18 @@ export class SportmonksProvider implements FootballDataProvider {
         status = response.status;
         if (!response.ok) {
           const errorCode = response.status === 429 ? "rate_limited" : [401, 403].includes(response.status) ? "auth_error" : `http_${response.status}`;
-          return { rows, status, topLevelKeys, message, partial, endpoint, errorCode };
+          return { rows, ...(status === undefined ? {} : { status }), topLevelKeys, ...(message === undefined ? {} : { message }), partial, endpoint, errorCode };
         }
         const payload = await response.json() as any;
         topLevelKeys = payload && typeof payload === "object" && !Array.isArray(payload) ? Object.keys(payload).sort().slice(0, 30) : ["<non-object>"];
         message = typeof payload?.message === "string" ? payload.message.replace(/\s+/g, " ").slice(0, 160) : undefined;
-        if (!Array.isArray(payload?.data)) return { rows, status, topLevelKeys, message, partial: true, endpoint, errorCode: "fixture_array_missing" };
+        if (!Array.isArray(payload?.data)) return { rows, ...(status === undefined ? {} : { status }), topLevelKeys, ...(message === undefined ? {} : { message }), partial: true, endpoint, errorCode: "fixture_array_missing" };
         rows.push(...payload.data);
         const hasMore = payload?.pagination?.has_more === true || payload?.pagination?.hasMore === true || payload?.meta?.pagination?.has_more === true;
         if (!hasMore) break;
         if (page === 5) partial = true;
       }
-      return { rows, status, topLevelKeys, message, partial, endpoint };
+      return { rows, ...(status === undefined ? {} : { status }), topLevelKeys, ...(message === undefined ? {} : { message }), partial, endpoint };
     };
 
     try {
@@ -139,11 +139,11 @@ export class SportmonksProvider implements FootballDataProvider {
         }
       }
       if (batch.errorCode === "auth_error" || batch.errorCode === "rate_limited") {
-        diagnostics = { provider: NAME, state: batch.errorCode, lastAttemptAt: attemptedAt, lastHttpStatus: batch.status, lastRecordCount: 0, lastErrorCode: batch.errorCode };
+        diagnostics = { provider: NAME, state: batch.errorCode, lastAttemptAt: attemptedAt, ...(batch.status === undefined ? {} : { lastHttpStatus: batch.status }), lastRecordCount: 0, lastErrorCode: batch.errorCode };
         return [];
       }
       if (batch.errorCode?.startsWith("http_")) {
-        diagnostics = { provider: NAME, state: "http_error", lastAttemptAt: attemptedAt, lastHttpStatus: batch.status, lastRecordCount: 0, lastErrorCode: batch.errorCode };
+        diagnostics = { provider: NAME, state: "http_error", lastAttemptAt: attemptedAt, ...(batch.status === undefined ? {} : { lastHttpStatus: batch.status }), lastRecordCount: 0, lastErrorCode: batch.errorCode };
         return [];
       }
       const observedAt = new Date().toISOString();
