@@ -128,7 +128,18 @@ export class SportApiAiProvider implements FootballDataProvider {
       const payload = await response.json() as unknown;
       const parsed = envelope(payload);
       if (!parsed.rows) {
-        diagnostics = { provider: NAME, state: "schema_error", lastAttemptAt: attemptedAt, lastHttpStatus: response.status, lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0, lastResponseShape: { topLevelKeys: parsed.topLevelKeys }, lastErrorCode: "fixture_array_missing" };
+        const root = obj(payload);
+        const message = typeof root?.message === "string" ? root.message.replace(/\s+/g, " ").slice(0, 160) : undefined;
+        let uriPath: string | undefined;
+        if (typeof root?.uri === "string") {
+          try { uriPath = new URL(root.uri, base()).pathname.slice(0, 200); } catch { /* Do not expose an unparseable provider URI. */ }
+        }
+        diagnostics = {
+          provider: NAME, state: "schema_error", lastAttemptAt: attemptedAt, lastHttpStatus: response.status,
+          lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0,
+          lastResponseShape: { topLevelKeys: parsed.topLevelKeys, ...(message ? { message } : {}), ...(uriPath ? { uriPath } : {}) },
+          lastErrorCode: message ? "provider_message_response" : "fixture_array_missing"
+        };
         return [];
       }
       const observedAt = new Date().toISOString();
