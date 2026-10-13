@@ -8,6 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
+import { getObservationStoreStatus, persistProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -55,7 +56,7 @@ app.get("/api/status", (_req: Request, res: Response) => res.json({
   modules: {
     canonicalDomain: "implemented_initial_contracts",
     providerAdapters: "sportapi_ai_and_sportmonks_adapters_implemented_live_validation_pending",
-    durableDatabase: process.env.DATABASE_URL ? "configured_but_not_integrated" : "not_configured",
+    durableDatabase: process.env.DATABASE_URL ? "provider_observation_store_configured_connection_must_be_checked" : "not_configured",
     verifiedHistoricalEvidence: "not_loaded",
     poissonBaseline: "implemented_not_calibrated",
     immutablePredictionLedger: "not_implemented",
@@ -63,6 +64,10 @@ app.get("/api/status", (_req: Request, res: Response) => res.json({
   }
 }));
 
+app.get("/api/storage/status", async (_req: Request, res: Response) => {
+  const status = await getObservationStoreStatus();
+  res.status(status.state === "error" ? 503 : 200).json(status);
+});
 app.get("/api/providers/status", (_req: Request, res: Response) => {
   const providers = providerStatus();
   res.json({ ...aggregateProviderStatus(providers.map(p => p.diagnostics)), providers });
@@ -100,12 +105,14 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
   ]);
   const providers = providerStatus();
   const candidates = [...sportApiAi, ...sportmonks, ...apiFootball];
+  const persistence = await persistProviderObservations(candidates);
   const reconciliationPreview = previewCandidateReconciliation(candidates);
   const byStatus: Record<string, number> = {};
   for (const candidate of candidates) byStatus[candidate.status] = (byStatus[candidate.status] ?? 0) + 1;
   const payload = {
     state: "provider_observations_only", date, canonicalFixturesCreated: 0,
-    note: "Candidates remain unverified. Preview groups exact normalized team/competition names and kickoff times within five minutes; it does not create canonical fixtures or verify results. Durable persistence is not connected.",
+    note: "Candidates remain unverified. Preview groups exact normalized team/competition names and kickoff times within five minutes; it does not create canonical fixtures or verify results. Provider observations are appended to PostgreSQL only when DATABASE_URL is configured and the store reports success.",
+    persistence,
     candidateCount: candidates.length,
     candidateCountsByProvider: { "sportapi-ai": sportApiAi.length, sportmonks: sportmonks.length, "api-football": apiFootball.length },
     candidateCountsByStatus: byStatus,
@@ -124,7 +131,7 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     providers
   };
   const retrievedAt = new Date().toISOString();
-  providerCache.set(date, { expiresAt: now + 5 * 60_000, retrievedAt, payload });
+  if (persistence.state !== "error") providerCache.set(date, { expiresAt: now + 5 * 60_000, retrievedAt, payload });
   if (providerCache.size > 100) {
     const oldestKey = providerCache.keys().next().value;
     if (oldestKey) providerCache.delete(oldestKey);
