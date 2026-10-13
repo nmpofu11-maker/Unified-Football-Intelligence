@@ -14,8 +14,9 @@ These notes are based on inspected source adapters. They are not a guarantee of 
 ## Sportmonks — primary
 
 - Existing source adapter documents `GET https://api.sportmonks.com/v3/football/fixtures/date/{YYYY-MM-DD}`.
-- Authentication is sent through the `Authorization` header using `SPORTMONKS_API_KEY` (legacy alias `SPORTMONKS_API_TOKEN`).
-- Existing includes: `participants;scores;league;state;season`, timezone `UTC`, page size 100. The source adapter caps pagination at five pages and tracks partial responses.
+- Authentication uses the documented `api_token` query parameter sourced from `SPORTMONKS_API_KEY` (legacy alias `SPORTMONKS_API_TOKEN`); the adapter also sends the `Authorization` header for compatibility. The token is never included in diagnostics.
+- Includes: `participants;scores;league;state;season`, timezone `UTC`, page size 50 (the documented maximum), and pagination capped at five pages with partial responses tracked.
+- Sportmonks may return HTTP 200 with an empty `data` array; inspect sanitized response-message diagnostics and subscription coverage before treating that as proof that no fixtures exist.
 - The new mapper requires fixture ID, home/away participants with IDs and names, competition ID/name and a parseable kickoff. Timezone-naive `starting_at` is treated as UTC only because the request explicitly asks for `timezone=UTC`.
 - Scores are read only for finished-status fixtures and valid score rows; a score is not proof of finality by itself.
 
