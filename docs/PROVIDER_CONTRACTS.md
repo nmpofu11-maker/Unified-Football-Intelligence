@@ -20,10 +20,16 @@ These notes are based on inspected source adapters. They are not a guarantee of 
 - The new mapper requires fixture ID, home/away participants with IDs and names, competition ID/name and a parseable kickoff. Timezone-naive `starting_at` is treated as UTC only because the request explicitly asks for `timezone=UTC`.
 - Scores are read only for finished-status fixtures and valid score rows; a score is not proof of finality by itself.
 
-## TheRundown and API-Football
+## API-Football — optional live observation source
 
-- TheRundown is a planned secondary adapter, not implemented in this greenfield foundation.
-- API-Football is optional and not a primary dependency for prediction analysis.
+- The adapter calls `GET https://v3.football.api-sports.io/fixtures?date=YYYY-MM-DD` with the `x-apisports-key` header from `API_FOOTBALL_KEY`; `API_FOOTBALL_BASE_URL` may override the base URL for a documented compatible endpoint.
+- It validates the provider `response` array and maps fixture, league, teams, kickoff, status and scores into unverified candidates. Scores are included only for finished-status fixtures with two non-negative integer goals.
+- Provider-reported errors, missing response arrays, HTTP authentication failures, rate limits, empty results and rejected records are reported separately. Provider error bodies and credentials are not copied into diagnostics.
+- API-Football is an optional source for fixture monitoring and does not make the forecast model calibrated.
+
+## TheRundown
+
+- TheRundown is a planned secondary adapter and is not implemented in this greenfield foundation.
 - No adapter should mark an HTTP response verified merely because it returned 200. Validate shape, fixture identity, freshness, status, score semantics and provenance.
 
 ## Operational behavior
