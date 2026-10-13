@@ -85,6 +85,7 @@ export class SportmonksProvider implements FootballDataProvider {
     const all: unknown[] = [];
     let lastStatus: number | undefined;
     let lastTopLevelKeys: string[] = [];
+    let lastMessage: string | undefined;
     let partial = false;
     try {
       for (let page = 1; page <= 5; page++) {
@@ -102,6 +103,7 @@ export class SportmonksProvider implements FootballDataProvider {
         }
         const payload = await response.json() as any;
         lastTopLevelKeys = payload && typeof payload === "object" && !Array.isArray(payload) ? Object.keys(payload).sort().slice(0, 30) : ["<non-object>"];
+        lastMessage = typeof payload?.message === "string" ? payload.message.replace(/\s+/g, " ").slice(0, 160) : undefined;
         if (!Array.isArray(payload?.data)) {
           if (page === 1) { diagnostics = { provider: NAME, state: "schema_error", lastAttemptAt: attemptedAt, lastHttpStatus: response.status, lastRecordCount: 0, lastErrorCode: "fixture_array_missing" }; return []; }
           partial = true; break;
@@ -119,7 +121,7 @@ export class SportmonksProvider implements FootballDataProvider {
         lastAttemptAt: attemptedAt, lastSuccessAt: observedAt,
         ...(lastStatus === undefined ? {} : { lastHttpStatus: lastStatus }),
         lastRecordCount: all.length, lastAcceptedCount: mapped.length, lastRejectedCount: all.length - mapped.length,
-        lastResponseShape: { topLevelKeys: lastTopLevelKeys, rowCount: all.length },
+        lastResponseShape: { topLevelKeys: lastTopLevelKeys, rowCount: all.length, ...(lastMessage ? { message: lastMessage } : {}) },
         ...(partial || mapped.length !== all.length ? { lastErrorCode: "pagination_or_schema_incomplete" } : {})
       };
       return mapped;
