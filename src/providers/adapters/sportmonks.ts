@@ -84,6 +84,7 @@ export class SportmonksProvider implements FootballDataProvider {
     diagnostics = { provider: NAME, state: "requesting", lastAttemptAt: attemptedAt, lastRecordCount: 0 };
     const all: unknown[] = [];
     let lastStatus: number | undefined;
+    let lastTopLevelKeys: string[] = [];
     let partial = false;
     try {
       for (let page = 1; page <= 5; page++) {
@@ -100,6 +101,7 @@ export class SportmonksProvider implements FootballDataProvider {
           partial = true; break;
         }
         const payload = await response.json() as any;
+        lastTopLevelKeys = payload && typeof payload === "object" && !Array.isArray(payload) ? Object.keys(payload).sort().slice(0, 30) : ["<non-object>"];
         if (!Array.isArray(payload?.data)) {
           if (page === 1) { diagnostics = { provider: NAME, state: "schema_error", lastAttemptAt: attemptedAt, lastHttpStatus: response.status, lastRecordCount: 0, lastErrorCode: "fixture_array_missing" }; return []; }
           partial = true; break;
@@ -112,7 +114,14 @@ export class SportmonksProvider implements FootballDataProvider {
       const observedAt = new Date().toISOString();
       const mapped = all.map(row => mapSportmonksFixture(row, observedAt)).filter((row): row is ProviderFixtureCandidate => row !== null)
         .filter(f => !query.competitionIds?.length || (f.competition.providerCompetitionId !== undefined && query.competitionIds.includes(f.competition.providerCompetitionId)));
-      diagnostics = { provider: NAME, state: partial ? "partial" : mapped.length ? "success" : all.length ? "partial" : "success_empty", lastAttemptAt: attemptedAt, lastSuccessAt: observedAt, ...(lastStatus === undefined ? {} : { lastHttpStatus: lastStatus }), lastRecordCount: mapped.length, ...(partial || mapped.length !== all.length ? { lastErrorCode: "pagination_or_schema_incomplete" } : {}) };
+      diagnostics = {
+        provider: NAME, state: partial ? "partial" : mapped.length ? "success" : all.length ? "partial" : "success_empty",
+        lastAttemptAt: attemptedAt, lastSuccessAt: observedAt,
+        ...(lastStatus === undefined ? {} : { lastHttpStatus: lastStatus }),
+        lastRecordCount: all.length, lastAcceptedCount: mapped.length, lastRejectedCount: all.length - mapped.length,
+        lastResponseShape: { topLevelKeys: lastTopLevelKeys, rowCount: all.length },
+        ...(partial || mapped.length !== all.length ? { lastErrorCode: "pagination_or_schema_incomplete" } : {})
+      };
       return mapped;
     } catch (error) {
       diagnostics = { provider: NAME, state: "request_error", lastAttemptAt: attemptedAt, lastRecordCount: 0, lastErrorCode: error instanceof Error && error.name === "TimeoutError" ? "request_timeout" : "network_or_parse_error" };
