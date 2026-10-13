@@ -7,6 +7,7 @@ import type { ProviderDiagnostics } from "./providers/provider.js";
 import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
+import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -98,11 +99,30 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     sportApiAiProvider.fetchFixtures(query), sportmonksProvider.fetchFixtures(query), apiFootballProvider.fetchFixtures(query)
   ]);
   const providers = providerStatus();
+  const candidates = [...sportApiAi, ...sportmonks, ...apiFootball];
+  const reconciliationPreview = previewCandidateReconciliation(candidates);
+  const byStatus: Record<string, number> = {};
+  for (const candidate of candidates) byStatus[candidate.status] = (byStatus[candidate.status] ?? 0) + 1;
   const payload = {
     state: "provider_observations_only", date, canonicalFixturesCreated: 0,
-    note: "Provider candidates are unverified observations. Canonical team/competition resolution, conflict review and durable persistence are not yet connected.",
-    candidateCount: sportApiAi.length + sportmonks.length + apiFootball.length, candidates: [...sportApiAi, ...sportmonks, ...apiFootball], providers
-  };
+    note: "Candidates remain unverified. Preview groups exact normalized team/competition names and kickoff times within five minutes; it does not create canonical fixtures or verify results. Durable persistence is not connected.",
+    candidateCount: candidates.length,
+    candidateCountsByProvider: { "sportapi-ai": sportApiAi.length, sportmonks: sportmonks.length, "api-football": apiFootball.length },
+    candidateCountsByStatus: byStatus,
+    reconciliationSummary: {
+      groups: reconciliationPreview.length,
+      corroborated: reconciliationPreview.filter(item => item.state === "corroborated").length,
+      conflicted: reconciliationPreview.filter(item => item.state === "conflicted").length,
+      singleSource: reconciliationPreview.filter(item => item.state === "single_source").length
+    },
+    reconciliationPreview: reconciliationPreview.slice(0, 20),
+    sampleCandidates: candidates.slice(0, 8).map(candidate => ({
+      provider: candidate.provider, providerFixtureId: candidate.providerFixtureId, kickoffUtc: candidate.kickoffUtc,
+      home: candidate.home.name, away: candidate.away.name, competition: candidate.competition.name,
+      status: candidate.status, ...(candidate.score ? { score: candidate.score } : {}), evidenceState: candidate.evidenceState
+    })),
+    providers
+  };;
   const retrievedAt = new Date().toISOString();
   providerCache.set(date, { expiresAt: now + 5 * 60_000, retrievedAt, payload });
   if (providerCache.size > 100) {
