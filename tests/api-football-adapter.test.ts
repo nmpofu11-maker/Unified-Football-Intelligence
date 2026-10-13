@@ -79,3 +79,32 @@ test("API-Football reports authentication failures without exposing response sec
     else process.env.API_FOOTBALL_KEY = oldKey;
   }
 });
+
+
+test("API-Football distinguishes network failures from malformed JSON without exposing exception details", async () => {
+  const oldFetch = globalThis.fetch;
+  const oldKey = process.env.API_FOOTBALL_KEY;
+  process.env.API_FOOTBALL_KEY = "test-key-not-a-real-secret";
+  try {
+    globalThis.fetch = (async () => {
+      throw new TypeError("fetch failed: https://example.invalid/?token=do-not-expose");
+    }) as typeof fetch;
+    const networkProvider = new ApiFootballProvider();
+    assert.deepEqual(await networkProvider.fetchFixtures({ dateFromUtc: "2026-10-13", dateToUtc: "2026-10-13" }), []);
+    assert.equal(networkProvider.diagnostics().state, "request_error");
+    assert.equal(networkProvider.diagnostics().lastErrorCode, "network_fetch_failed");
+    assert.equal(JSON.stringify(networkProvider.diagnostics()).includes("do-not-expose"), false);
+
+    globalThis.fetch = (async () => new Response("not-json", {
+      status: 200, headers: { "content-type": "application/json" }
+    })) as typeof fetch;
+    const parseProvider = new ApiFootballProvider();
+    assert.deepEqual(await parseProvider.fetchFixtures({ dateFromUtc: "2026-10-13", dateToUtc: "2026-10-13" }), []);
+    assert.equal(parseProvider.diagnostics().state, "request_error");
+    assert.equal(parseProvider.diagnostics().lastErrorCode, "malformed_json");
+  } finally {
+    globalThis.fetch = oldFetch;
+    if (oldKey === undefined) delete process.env.API_FOOTBALL_KEY;
+    else process.env.API_FOOTBALL_KEY = oldKey;
+  }
+});
