@@ -114,8 +114,10 @@ export class SportApiAiProvider implements FootballDataProvider {
     const attemptedAt = new Date().toISOString();
     diagnostics = { provider: NAME, state: "requesting", lastAttemptAt: attemptedAt, lastRecordCount: 0, lastAcceptedCount: 0, lastRejectedCount: 0 };
     try {
-      const url = new URL(`${base()}/fixtures`);
-      url.searchParams.set("date", query.dateFromUtc);
+      // SportAPI's documented route is /fixtures/date/YYYY-MM-DD.
+      // The previous /fixtures?date= route returns the API's generic welcome
+      // envelope (HTTP 200), not fixture data.
+      const url = new URL(`${base()}/fixtures/date/${encodeURIComponent(query.dateFromUtc)}`);
       const response = await fetch(url, {
         headers: { "X-Api-Key": apiKey, Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
         signal: signal ?? AbortSignal.timeout(15_000)
