@@ -141,3 +141,43 @@ test("Sportmonks uses documented api_token authentication and supported page siz
     else process.env.SPORTMONKS_BASE_URL = previousBase;
   }
 });
+
+
+test("SportAPI.ai requests the documented fixtures-by-date route", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousKey = process.env.SPORTAPI_AI_KEY;
+  const previousBase = process.env.SPORTAPI_AI_BASE_URL;
+  process.env.SPORTAPI_AI_KEY = "test-key-not-a-real-secret";
+  delete process.env.SPORTAPI_AI_BASE_URL;
+  let requestedUrl: URL | undefined;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    requestedUrl = new URL(String(input));
+    return new Response(JSON.stringify({
+      success: true,
+      date: "2026-10-13",
+      data: [{
+        id: 123,
+        datetime: "2026-10-13T17:00:00Z",
+        status: "Scheduled",
+        league_name: "Example League",
+        home_team: "Home FC",
+        away_team: "Away FC"
+      }]
+    }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const provider = new SportApiAiProvider();
+    const rows = await provider.fetchFixtures({ dateFromUtc: "2026-10-13", dateToUtc: "2026-10-13" });
+    assert.equal(requestedUrl?.pathname, "/api/fixtures/date/2026-10-13");
+    assert.equal(requestedUrl?.search, "");
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.home.name, "Home FC");
+    assert.equal(provider.diagnostics().state, "success");
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousKey === undefined) delete process.env.SPORTAPI_AI_KEY;
+    else process.env.SPORTAPI_AI_KEY = previousKey;
+    if (previousBase === undefined) delete process.env.SPORTAPI_AI_BASE_URL;
+    else process.env.SPORTAPI_AI_BASE_URL = previousBase;
+  }
+});
