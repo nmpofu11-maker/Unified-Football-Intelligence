@@ -11,7 +11,7 @@ export interface ProviderDiagnostics {
   lastAcceptedCount?: number;
   lastRejectedCount?: number;
   lastRejectionReasons?: Record<string, number>;
-  lastResponseShape?: { topLevelKeys: string[]; rowCount?: number };
+  lastResponseShape?: { topLevelKeys: string[]; rowCount?: number; message?: string; uriPath?: string };
   lastErrorCode?: string;
 }
 export interface FixtureQuery { dateFromUtc: string; dateToUtc: string; competitionIds?: string[]; }
