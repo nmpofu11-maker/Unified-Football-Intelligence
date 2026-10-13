@@ -127,8 +127,10 @@ export async function persistProviderObservations(
   let inserted = 0;
   try {
     client = await configuredPool.connect();
-    await client.query("BEGIN");
+    // Create/verify the schema outside the observation transaction. Otherwise a later
+    // insert failure could roll back DDL after schemaReady has been set to true.
     await ensureSchema(client);
+    await client.query("BEGIN");
     for (const candidate of valid) {
       const result = await client.query(
         `INSERT INTO provider_fixture_observations
