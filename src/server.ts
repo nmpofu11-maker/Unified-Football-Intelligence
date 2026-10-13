@@ -7,6 +7,7 @@ import type { ProviderDiagnostics } from "./providers/provider.js";
 import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
+import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -98,10 +99,29 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     sportApiAiProvider.fetchFixtures(query), sportmonksProvider.fetchFixtures(query), apiFootballProvider.fetchFixtures(query)
   ]);
   const providers = providerStatus();
+  const candidates = [...sportApiAi, ...sportmonks, ...apiFootball];
+  const reconciliationPreview = previewCandidateReconciliation(candidates);
+  const byStatus: Record<string, number> = {};
+  for (const candidate of candidates) byStatus[candidate.status] = (byStatus[candidate.status] ?? 0) + 1;
   const payload = {
     state: "provider_observations_only", date, canonicalFixturesCreated: 0,
-    note: "Provider candidates are unverified observations. Canonical team/competition resolution, conflict review and durable persistence are not yet connected.",
-    candidateCount: sportApiAi.length + sportmonks.length + apiFootball.length, candidates: [...sportApiAi, ...sportmonks, ...apiFootball], providers
+    note: "Candidates remain unverified. Preview groups exact normalized team/competition names and kickoff times within five minutes; it does not create canonical fixtures or verify results. Durable persistence is not connected.",
+    candidateCount: candidates.length,
+    candidateCountsByProvider: { "sportapi-ai": sportApiAi.length, sportmonks: sportmonks.length, "api-football": apiFootball.length },
+    candidateCountsByStatus: byStatus,
+    reconciliationSummary: {
+      groups: reconciliationPreview.length,
+      corroborated: reconciliationPreview.filter(item => item.state === "corroborated").length,
+      conflicted: reconciliationPreview.filter(item => item.state === "conflicted").length,
+      singleSource: reconciliationPreview.filter(item => item.state === "single_source").length
+    },
+    reconciliationPreview: reconciliationPreview.slice(0, 20),
+    sampleCandidates: candidates.slice(0, 8).map(candidate => ({
+      provider: candidate.provider, providerFixtureId: candidate.providerFixtureId, kickoffUtc: candidate.kickoffUtc,
+      home: candidate.home.name, away: candidate.away.name, competition: candidate.competition.name,
+      status: candidate.status, ...(candidate.score ? { score: candidate.score } : {}), evidenceState: candidate.evidenceState
+    })),
+    providers
   };
   const retrievedAt = new Date().toISOString();
   providerCache.set(date, { expiresAt: now + 5 * 60_000, retrievedAt, payload });
@@ -141,7 +161,7 @@ app.get("/", (_req: Request, res: Response) => res.type("html").send(`<!doctype 
 <section class="card"><h2>Provider connections</h2><p class="muted">A configured secret is not proof that an API call works. Each provider remains disconnected until its contract, live response and data validation pass.</p><div id="providers">Loading provider status…</div></section>
 <section class="card" style="margin-top:14px"><h2>Run live fixture check</h2><p class="muted">This makes on-demand calls to SportAPI.ai, Sportmonks and API-Football if credentials are configured. Returned records remain unverified until canonical identity checks and persistence are connected.</p><div class="row"><label for="fixture-date">UTC calendar date</label><input id="fixture-date" type="date"><label for="provider-token">Diagnostics token (when configured)</label><input id="provider-token" type="password" autocomplete="off"><button id="fetch-fixtures">Check providers</button></div><pre id="fixture-check" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No provider check run yet.</pre></section>
 <section class="card" style="margin-top:14px"><h2>Integrity rules</h2><ul><li>Unknown data stays unknown; it is never replaced with zero or a guess.</li><li>Conflicting fixture identity or results are flagged, not silently selected.</li><li>Forecast probabilities and betting decisions are separate.</li><li>No recommendations until verified data, calibration, fresh odds and risk gates pass.</li></ul><p class="small">This foundation is not yet a live prediction service. Status is intentionally honest.</p></section>
-<script>async function load(){try{const [p,f,h]=await Promise.all([fetch('/api/providers/status').then(r=>r.json()),fetch('/api/fixtures').then(r=>r.json()),fetch('/api/history/status').then(r=>r.json())]);document.getElementById('fixtures').textContent=f.count+' verified fixtures';document.getElementById('history').textContent=h.seededTeamNames+' team names · '+h.verifiedSettledResults+' verified results';document.getElementById('providers').innerHTML=p.providers.map(x=>'<div class="row"><span><strong>'+x.name+'</strong><br><span class="small">'+x.priority+' · credential '+(x.credentialConfigured?'configured':'missing')+' · '+x.integrationState+'</span></span><span class="status">'+x.diagnostics.state+'</span></div>').join('')}catch(e){document.getElementById('providers').textContent='Status API unavailable.'}}document.getElementById('fixture-date').value=new Date().toISOString().slice(0,10);document.getElementById('fetch-fixtures').addEventListener('click',async()=>{const date=document.getElementById('fixture-date').value;const out=document.getElementById('fixture-check');out.textContent='Checking providers…';try{const token=document.getElementById('provider-token').value;const r=await fetch('/api/providers/fixtures?date='+encodeURIComponent(date),{headers:token?{'x-provider-diagnostics-token':token}:{}});const data=await r.json();out.textContent=JSON.stringify(data,null,2)}catch(e){out.textContent='Provider check failed. Inspect server diagnostics.'}});load();</script>
+<script>async function load(){try{const [p,f,h]=await Promise.all([fetch('/api/providers/status').then(r=>r.json()),fetch('/api/fixtures').then(r=>r.json()),fetch('/api/history/status').then(r=>r.json())]);document.getElementById('fixtures').textContent=f.count+' verified fixtures';document.getElementById('history').textContent=h.seededTeamNames+' team names · '+h.verifiedSettledResults+' verified results';document.getElementById('providers').innerHTML=p.providers.map(x=>'<div class="row"><span><strong>'+x.name+'</strong><br><span class="small">'+x.priority+' · credential '+(x.credentialConfigured?'configured':'missing')+' · '+x.integrationState+'</span></span><span class="status">'+x.diagnostics.state+'</span></div>').join('')}catch(e){document.getElementById('providers').textContent='Status API unavailable.'}}document.getElementById('fixture-date').value=new Date().toISOString().slice(0,10);document.getElementById('fetch-fixtures').addEventListener('click',async()=>{const date=document.getElementById('fixture-date').value;const out=document.getElementById('fixture-check');out.textContent='Checking providers…';try{const token=document.getElementById('provider-token').value;const r=await fetch('/api/providers/fixtures?date='+encodeURIComponent(date),{headers:token?{'x-provider-diagnostics-token':token}:{}});const data=await r.json();if(data.candidateCount!==undefined){out.textContent=JSON.stringify({state:data.state,date:data.date,candidateCount:data.candidateCount,candidateCountsByProvider:data.candidateCountsByProvider,candidateCountsByStatus:data.candidateCountsByStatus,reconciliationSummary:data.reconciliationSummary,providers:(data.providers||[]).map(p=>({name:p.name,state:p.diagnostics?.state,records:p.diagnostics?.lastRecordCount,accepted:p.diagnostics?.lastAcceptedCount,rejected:p.diagnostics?.lastRejectedCount,httpStatus:p.diagnostics?.lastHttpStatus,error:p.diagnostics?.lastErrorCode})),sampleCandidates:(data.sampleCandidates||[]).slice(0,5)},null,2)}else{out.textContent=JSON.stringify(data,null,2)}}catch(e){out.textContent='Provider check failed. Inspect server diagnostics.'}});load();</script>
 </main></body></html>`));
 
 const port = Number(process.env.PORT ?? 3000);
