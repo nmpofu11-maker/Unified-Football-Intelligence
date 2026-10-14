@@ -251,6 +251,11 @@ export async function persistCanonicalEvidence(
           (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (canonical_key) DO UPDATE SET
+           kickoff_utc = EXCLUDED.kickoff_utc,
+           home_name = EXCLUDED.home_name,
+           away_name = EXCLUDED.away_name,
+           competition_name = EXCLUDED.competition_name,
+           status = EXCLUDED.status,
            providers = ARRAY(SELECT DISTINCT unnest(canonical_fixture_evidence.providers || EXCLUDED.providers)),
            evidence_state = CASE WHEN canonical_fixture_evidence.evidence_state = 'conflicted' OR EXCLUDED.evidence_state = 'conflicted' THEN 'conflicted' ELSE 'corroborated' END,
            updated_at = NOW()
