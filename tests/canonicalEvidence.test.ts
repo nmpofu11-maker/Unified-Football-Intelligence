@@ -99,3 +99,25 @@ test("UEFA-prefixed and provider-short competition labels reconcile", () => {
   assert.equal(result.length, 1);
   assert.equal(result[0]?.state, "corroborated");
 });
+
+
+test("live statuses observed more than six hours after kickoff are not exposed as corroborated fixtures", () => {
+  const result = previewCandidateReconciliation([
+    candidate("sportapi-ai", {
+      kickoffUtc: "2026-10-14T18:00:00.000Z",
+      observedAt: "2026-10-15T01:00:00.000Z",
+      status: "live",
+      score: undefined
+    }),
+    candidate("api-football", {
+      kickoffUtc: "2026-10-14T18:00:00.000Z",
+      observedAt: "2026-10-15T01:05:00.000Z",
+      status: "live",
+      score: undefined
+    })
+  ]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.state, "conflicted");
+  assert.ok(result[0]?.reasons.includes("stale_live_status"));
+  assert.deepEqual(result[0]?.scores, []);
+});
