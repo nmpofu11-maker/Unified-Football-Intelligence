@@ -20,18 +20,51 @@ const normalise = (value: string): string =>
   value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 
+// Exact, curated aliases only; never use fuzzy matching for identity decisions.
+const TEAM_ALIASES: Record<string, string> = {
+  "man utd": "manchester united",
+  "man united": "manchester united",
+  "manchester utd": "manchester united",
+  "man city": "manchester city",
+  "nottm forest": "nottingham forest",
+  "wolves": "wolverhampton wanderers",
+  "qpr": "queens park rangers",
+  "spurs": "tottenham hotspur",
+  "ath madrid": "atletico madrid",
+  "atletico de madrid": "atletico madrid",
+  "internazionale": "inter",
+  "fc internazionale milano": "inter",
+  "psg": "paris saint germain"
+};
+
+const COMPETITION_ALIASES: Record<string, string> = {
+  "english premier league": "premier league",
+  "england premier league": "premier league",
+  "epl": "premier league",
+  "english championship": "championship",
+  "england championship": "championship",
+  "uefa champions league": "champions league",
+  "uefa europa league": "europa league",
+  "uefa conference league": "conference league"
+};
+
+function canonicalName(value: string, aliases: Record<string, string>): string {
+  const normalized = normalise(value);
+  return aliases[normalized] ?? normalized;
+}
+
 function baseKey(f: ProviderFixtureCandidate): string {
   return [
-    normalise(f.home.name),
-    normalise(f.away.name),
-    normalise(f.competition.name)
+    canonicalName(f.home.name, TEAM_ALIASES),
+    canonicalName(f.away.name, TEAM_ALIASES),
+    canonicalName(f.competition.name, COMPETITION_ALIASES)
   ].join("|");
 }
 
 /**
  * Conservative cross-provider corroboration preview. This intentionally does not
  * create canonical fixtures, resolve team/competition IDs, or verify result evidence.
- * Only exact normalized names and kickoff times within five minutes are grouped.
+ * Curated exact aliases bridge known naming variants; kickoff times must still be within five minutes.
  */
 export function previewCandidateReconciliation(
   candidates: ProviderFixtureCandidate[],
