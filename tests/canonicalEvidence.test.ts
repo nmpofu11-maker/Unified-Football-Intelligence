@@ -58,3 +58,32 @@ test("kickoff differences beyond five minutes are not merged", () => {
   assert.equal(result.length, 2);
   assert.ok(result.every(group => group.state === "single_source"));
 });
+
+test("curated team and competition aliases reconcile exact provider naming variants", () => {
+  const result = previewCandidateReconciliation([
+    candidate("sportapi-ai", {
+      home: { name: "QPR" },
+      competition: { name: "English Championship" }
+    }),
+    candidate("api-football", {
+      home: { name: "Queens Park Rangers" },
+      competition: { name: "Championship" }
+    })
+  ]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.state, "corroborated");
+  assert.deepEqual(result[0]?.providers, ["api-football", "sportapi-ai"]);
+});
+
+test("aliases do not override kickoff tolerance or score conflict detection", () => {
+  const result = previewCandidateReconciliation([
+    candidate("sportapi-ai", { home: { name: "QPR" } }),
+    candidate("api-football", {
+      home: { name: "Queens Park Rangers" },
+      kickoffUtc: "2026-10-14T18:06:00.000Z"
+    })
+  ]);
+  assert.equal(result.length, 2);
+  assert.ok(result.every(group => group.state === "single_source"));
+});
+
