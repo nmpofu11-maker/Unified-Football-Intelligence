@@ -311,6 +311,79 @@ export async function persistCanonicalEvidence(
   }
 }
 
+export interface StoredObservationReplayResult {
+  state: "saved" | "connected_empty" | "not_configured" | "error";
+  latestObservationsLoaded: number;
+  canonicalEvidence: CanonicalEvidencePersistenceResult;
+  errorCode?: string;
+}
+
+/**
+ * Replays the latest persisted snapshot for each provider fixture identity.
+ * Older snapshots are excluded so prior scheduled/live states cannot conflict
+ * with a later final result from the same provider fixture ID.
+ */
+export async function replayStoredProviderObservations(): Promise<StoredObservationReplayResult> {
+  const configuredPool = getPool();
+  if (!configuredPool) {
+    return {
+      state: "not_configured",
+      latestObservationsLoaded: 0,
+      canonicalEvidence: { state: "not_configured", corroboratedFixtures: 0, verifiedResults: 0, conflictedGroups: 0 }
+    };
+  }
+
+  let client: PoolClient | undefined;
+  let candidates: ProviderFixtureCandidate[] = [];
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{ observation: unknown }>(`
+      SELECT DISTINCT ON (provider, provider_fixture_id) observation
+      FROM provider_fixture_observations
+      ORDER BY provider, provider_fixture_id, observed_at DESC, id DESC
+    `);
+    candidates = result.rows.flatMap(row => {
+      try {
+        const value = typeof row.observation === "string" ? JSON.parse(row.observation) : row.observation;
+        if (!value || typeof value !== "object") return [];
+        const candidate = value as ProviderFixtureCandidate;
+        if (
+          typeof candidate.provider !== "string" ||
+          typeof candidate.providerFixtureId !== "string" ||
+          typeof candidate.kickoffUtc !== "string" ||
+          typeof candidate.home?.name !== "string" ||
+          typeof candidate.away?.name !== "string" ||
+          typeof candidate.competition?.name !== "string" ||
+          typeof candidate.status !== "string" ||
+          !Number.isFinite(Date.parse(candidate.kickoffUtc))
+        ) return [];
+        return [candidate];
+      } catch {
+        return [];
+      }
+    });
+  } catch (error) {
+    const errorCode = safeErrorCode(error);
+    return {
+      state: "error",
+      latestObservationsLoaded: 0,
+      canonicalEvidence: { state: "error", corroboratedFixtures: 0, verifiedResults: 0, conflictedGroups: 0, errorCode },
+      errorCode
+    };
+  } finally {
+    client?.release();
+  }
+
+  const canonicalEvidence = await persistCanonicalEvidence(candidates);
+  return {
+    state: canonicalEvidence.state,
+    latestObservationsLoaded: candidates.length,
+    canonicalEvidence,
+    ...(canonicalEvidence.errorCode ? { errorCode: canonicalEvidence.errorCode } : {})
+  };
+}
+
 export interface CanonicalEvidenceSummary {
   configured: boolean;
   state: "ready" | "not_configured" | "error";
