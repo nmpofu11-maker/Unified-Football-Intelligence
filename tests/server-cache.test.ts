@@ -41,7 +41,8 @@ test("fixture endpoint distinguishes fresh provider checks from cache hits", { t
       SPORTAPI_AI_KEY: "",
       SPORTAPI_API_KEY: "",
       SPORTMONKS_API_KEY: "",
-      SPORTMONKS_API_TOKEN: ""
+      SPORTMONKS_API_TOKEN: "",
+      API_FOOTBALL_KEY: ""
     },
     stdio: "ignore"
   });
