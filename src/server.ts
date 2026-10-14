@@ -8,7 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { getObservationStoreStatus, getObservationStoreSummary, persistProviderObservations } from "./storage/postgresObservations.js";
+import { getObservationStoreStatus, getObservationStoreSummary, persistCanonicalEvidence, persistProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -110,6 +110,7 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
   const providers = providerStatus();
   const candidates = [...sportApiAi, ...sportmonks, ...apiFootball];
   const persistence = await persistProviderObservations(candidates);
+  const canonicalEvidence = await persistCanonicalEvidence(candidates);
   const reconciliationPreview = previewCandidateReconciliation(candidates);
   const byStatus: Record<string, number> = {};
   for (const candidate of candidates) byStatus[candidate.status] = (byStatus[candidate.status] ?? 0) + 1;
@@ -117,6 +118,7 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     state: "provider_observations_only", date, canonicalFixturesCreated: 0,
     note: "Candidates remain unverified. Preview groups exact normalized team/competition names and kickoff times within five minutes; it does not create canonical fixtures or verify results. Provider observations are appended to PostgreSQL only when DATABASE_URL is configured and the store reports success.",
     persistence,
+    canonicalEvidence,
     candidateCount: candidates.length,
     candidateCountsByProvider: { "sportapi-ai": sportApiAi.length, sportmonks: sportmonks.length, "api-football": apiFootball.length },
     candidateCountsByStatus: byStatus,
