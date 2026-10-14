@@ -120,3 +120,23 @@ test("live statuses observed more than six hours after kickoff are not exposed a
   assert.ok(result[0]?.reasons.includes("stale_live_status"));
   assert.deepEqual(result[0]?.scores, []);
 });
+
+test("live fixtures past the six-hour window are stale even when provider timestamps are old", () => {
+  const sportApi = candidate("sportapi-ai", {
+    kickoffUtc: "2026-10-13T18:00:00.000Z",
+    observedAt: "2026-10-13T18:05:00.000Z",
+    status: "live"
+  });
+  const apiFootball = candidate("api-football", {
+    kickoffUtc: "2026-10-13T18:00:00.000Z",
+    observedAt: "2026-10-13T18:06:00.000Z",
+    status: "live"
+  });
+  delete sportApi.score;
+  delete apiFootball.score;
+  const now = Date.parse("2026-10-14T19:00:00.000Z");
+  const result = previewCandidateReconciliation([sportApi, apiFootball], 5 * 60_000, now);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.state, "conflicted");
+  assert.ok(result[0]?.reasons.includes("stale_live_status"));
+});
