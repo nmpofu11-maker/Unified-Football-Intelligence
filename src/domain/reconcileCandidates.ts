@@ -68,7 +68,8 @@ function baseKey(f: ProviderFixtureCandidate): string {
  */
 export function previewCandidateReconciliation(
   candidates: ProviderFixtureCandidate[],
-  kickoffToleranceMs = 5 * 60_000
+  kickoffToleranceMs = 5 * 60_000,
+  nowMs = Date.now()
 ): CandidateMatchPreview[] {
   const buckets = new Map<string, ProviderFixtureCandidate[]>();
   for (const candidate of candidates) {
@@ -102,11 +103,13 @@ export function previewCandidateReconciliation(
       const reasons: string[] = [];
       if (providers.length < 2) reasons.push("only_one_provider_observation");
       if (statuses.length > 1) reasons.push("provider_status_disagreement");
-      // A live status observed more than six hours after kickoff is stale evidence.
-      // Do not infer a final score or expose it as a current corroborated fixture.
+      // A live status is stale if either its observation timestamp or the current
+      // wall clock is more than six hours after kickoff. Some feeds preserve an old
+      // event timestamp in the payload, so observedAt alone is not a safe freshness gate.
+      // Do not infer a final score or expose stale live data as a current corroborated fixture.
       const staleLiveObservation = group.some(item =>
         item.status === "live" &&
-        Date.parse(item.observedAt) - Date.parse(item.kickoffUtc) > 6 * 60 * 60_000
+        Math.max(Date.parse(item.observedAt), nowMs) - Date.parse(item.kickoffUtc) > 6 * 60 * 60_000
       );
       if (staleLiveObservation) reasons.push("stale_live_status");
       if (scores.length > 1) reasons.push("provider_score_disagreement");
