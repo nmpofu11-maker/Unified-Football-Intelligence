@@ -248,7 +248,7 @@ export async function persistCanonicalEvidence(
     // A replay is a full reconstruction from the latest snapshot of every stored
     // provider fixture identity. Remove stale canonical keys first, including old
     // competition-label variants, while keeping raw observations immutable.
-    if (options.replaceSnapshot && candidates.length > 0) {
+    if (options.replaceSnapshot && previews.length > 0) {
       await client.query("DELETE FROM verified_settled_results");
       await client.query("DELETE FROM canonical_fixture_evidence");
     }
