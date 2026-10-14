@@ -418,9 +418,14 @@ export async function getCanonicalEvidenceSummary(): Promise<CanonicalEvidenceSu
       fixtures: number; verified_results: number; conflicted_fixtures: number;
     }>(`
       SELECT
-        (SELECT COUNT(*)::integer FROM canonical_fixture_evidence WHERE evidence_state = 'corroborated') AS fixtures,
+        (SELECT COUNT(*)::integer FROM canonical_fixture_evidence
+          WHERE evidence_state = 'corroborated'
+            AND NOT (status = 'live' AND kickoff_utc < NOW() - INTERVAL '6 hours')) AS fixtures,
         (SELECT COUNT(*)::integer FROM verified_settled_results WHERE evidence_state = 'verified') AS verified_results,
-        (SELECT COUNT(*)::integer FROM canonical_fixture_evidence WHERE evidence_state = 'conflicted') AS conflicted_fixtures
+        (SELECT COUNT(*)::integer FROM canonical_fixture_evidence
+          WHERE evidence_state = 'conflicted'
+             OR (evidence_state = 'corroborated' AND status = 'live'
+                 AND kickoff_utc < NOW() - INTERVAL '6 hours')) AS conflicted_fixtures
     `);
     const rows = await client.query<{
       canonical_key: string; kickoff_utc: Date; home_name: string; away_name: string;
@@ -433,6 +438,7 @@ export async function getCanonicalEvidenceSummary(): Promise<CanonicalEvidenceSu
       LEFT JOIN verified_settled_results r
         ON r.canonical_key = f.canonical_key AND r.evidence_state = 'verified'
       WHERE f.evidence_state = 'corroborated'
+        AND NOT (f.status = 'live' AND f.kickoff_utc < NOW() - INTERVAL '6 hours')
       ORDER BY f.kickoff_utc ASC
       LIMIT 500
     `);
