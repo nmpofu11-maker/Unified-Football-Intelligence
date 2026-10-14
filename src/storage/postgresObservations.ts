@@ -306,6 +306,71 @@ export async function persistCanonicalEvidence(
   }
 }
 
+export interface CanonicalEvidenceSummary {
+  configured: boolean;
+  state: "ready" | "not_configured" | "error";
+  corroboratedFixtureCount?: number;
+  verifiedSettledResultCount?: number;
+  conflictedFixtureCount?: number;
+  fixtures?: Array<{
+    id: string; kickoffUtc: string; home: string; away: string; competition: string;
+    status: string; providers: string[]; evidenceState: string;
+    score?: { home: number; away: number };
+  }>;
+  errorCode?: string;
+}
+
+/** Read-only canonical evidence view. Conflicted results are never exposed as verified. */
+export async function getCanonicalEvidenceSummary(): Promise<CanonicalEvidenceSummary> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { configured: false, state: "not_configured" };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const counts = await client.query<{
+      fixtures: number; verified_results: number; conflicted_fixtures: number;
+    }>(`
+      SELECT
+        (SELECT COUNT(*)::integer FROM canonical_fixture_evidence WHERE evidence_state = 'corroborated') AS fixtures,
+        (SELECT COUNT(*)::integer FROM verified_settled_results WHERE evidence_state = 'verified') AS verified_results,
+        (SELECT COUNT(*)::integer FROM canonical_fixture_evidence WHERE evidence_state = 'conflicted') AS conflicted_fixtures
+    `);
+    const rows = await client.query<{
+      canonical_key: string; kickoff_utc: Date; home_name: string; away_name: string;
+      competition_name: string; status: string; providers: string[]; evidence_state: string;
+      home_goals: number | null; away_goals: number | null;
+    }>(`
+      SELECT f.canonical_key, f.kickoff_utc, f.home_name, f.away_name, f.competition_name,
+             f.status, f.providers, f.evidence_state, r.home_goals, r.away_goals
+      FROM canonical_fixture_evidence f
+      LEFT JOIN verified_settled_results r
+        ON r.canonical_key = f.canonical_key AND r.evidence_state = 'verified'
+      WHERE f.evidence_state = 'corroborated'
+      ORDER BY f.kickoff_utc ASC
+      LIMIT 500
+    `);
+    const c = counts.rows[0];
+    return {
+      configured: true, state: "ready",
+      corroboratedFixtureCount: c?.fixtures ?? 0,
+      verifiedSettledResultCount: c?.verified_results ?? 0,
+      conflictedFixtureCount: c?.conflicted_fixtures ?? 0,
+      fixtures: rows.rows.map(row => ({
+        id: row.canonical_key, kickoffUtc: row.kickoff_utc.toISOString(),
+        home: row.home_name, away: row.away_name, competition: row.competition_name,
+        status: row.status, providers: row.providers, evidenceState: row.evidence_state,
+        ...(row.home_goals !== null && row.away_goals !== null
+          ? { score: { home: row.home_goals, away: row.away_goals } } : {})
+      }))
+    };
+  } catch (error) {
+    return { configured: true, state: "error", errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
 export interface ObservationStoreSummary {
   configured: boolean;
   state: "ready" | "not_configured" | "error";
