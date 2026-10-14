@@ -87,3 +87,15 @@ test("aliases do not override kickoff tolerance or score conflict detection", ()
   assert.ok(result.every(group => group.state === "single_source"));
 });
 
+test("UEFA-prefixed and provider-short competition labels reconcile", () => {
+  const result = previewCandidateReconciliation([
+    candidate("sportapi-ai", {
+      competition: { name: "UEFA Champions League" }
+    }),
+    candidate("api-football", {
+      competition: { name: "Champions League" }
+    })
+  ]);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.state, "corroborated");
+});
