@@ -8,7 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { getObservationStoreStatus, getObservationStoreSummary, persistCanonicalEvidence, persistProviderObservations } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, persistCanonicalEvidence, persistProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -154,17 +154,35 @@ app.get("/api/teams/watchlist", (_req: Request, res: Response) => res.json({
   teams: teamSeed.teams
 }));
 
-app.get("/api/fixtures", (_req: Request, res: Response) => res.status(200).json({
-  state: "unavailable",
-  fixtures: [],
-  count: 0,
-  reasons: ["provider_observations_not_yet_canonicalized_or_persisted", "no_fixture_data_is_fabricated"]
-}));
+app.get("/api/fixtures", async (_req: Request, res: Response) => {
+  const evidence = await getCanonicalEvidenceSummary();
+  if (evidence.state !== "ready") {
+    return res.status(evidence.state === "error" ? 503 : 200).json({
+      state: evidence.state, fixtures: [], count: 0,
+      reasons: [evidence.errorCode ?? "canonical_evidence_store_not_ready"]
+    });
+  }
+  return res.json({
+    state: "canonical_evidence",
+    fixtures: evidence.fixtures ?? [],
+    count: evidence.corroboratedFixtureCount ?? 0,
+    verifiedSettledResults: evidence.verifiedSettledResultCount ?? 0,
+    conflictedFixtures: evidence.conflictedFixtureCount ?? 0,
+    note: "Fixtures are shown only when corroborated across independent providers. Scores are included only when settled-result evidence passed the verification gate."
+  });
+});
 
-app.get("/api/history/status", (_req: Request, res: Response) => res.json({
-  state: "seeded_names_only", seededTeamNames: teamSeed.count, canonicalTeamMappings: 0, verifiedSettledResults: 0,
-  reasons: ["original_80_names_seeded_but_provider_ids_and_aliases_are_unresolved", "durable_history_store_not_connected"]
-}));
+app.get("/api/history/status", async (_req: Request, res: Response) => {
+  const evidence = await getCanonicalEvidenceSummary();
+  return res.status(evidence.state === "error" ? 503 : 200).json({
+    state: evidence.state === "ready" ? "canonical_evidence" : evidence.state,
+    seededTeamNames: teamSeed.count,
+    canonicalTeamMappings: evidence.corroboratedFixtureCount ?? 0,
+    verifiedSettledResults: evidence.verifiedSettledResultCount ?? 0,
+    conflictedFixtures: evidence.conflictedFixtureCount ?? 0,
+    reasons: evidence.state === "ready" ? [] : [evidence.errorCode ?? "canonical_evidence_store_not_ready"]
+  });
+});
 
 app.get("/", (_req: Request, res: Response) => res.type("html").send(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Unified Football Intelligence</title>
