@@ -8,7 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, persistCanonicalEvidence, persistProviderObservations } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -146,6 +146,25 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     if (oldestKey) providerCache.delete(oldestKey);
   }
   return res.json({ ...payload, cache: "miss", cached: false, retrievedAt });
+});
+
+
+app.post("/api/history/replay", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+  const result = await replayStoredProviderObservations();
+  return res.status(result.state === "error" ? 503 : 200).json({
+    state: result.state,
+    latestObservationsLoaded: result.latestObservationsLoaded,
+    canonicalEvidence: result.canonicalEvidence,
+    ...(result.errorCode ? { errorCode: result.errorCode } : {})
+  });
 });
 
 
