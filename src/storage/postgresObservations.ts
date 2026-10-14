@@ -224,7 +224,8 @@ export interface CanonicalEvidencePersistenceResult {
  * status, and the same score; single-source or incomplete evidence never qualifies.
  */
 export async function persistCanonicalEvidence(
-  candidates: ProviderFixtureCandidate[]
+  candidates: ProviderFixtureCandidate[],
+  options: { replaceSnapshot?: boolean } = {}
 ): Promise<CanonicalEvidencePersistenceResult> {
   const configuredPool = getPool();
   if (!configuredPool) {
@@ -244,6 +245,13 @@ export async function persistCanonicalEvidence(
     client = await configuredPool.connect();
     await ensureSchema(client);
     await client.query("BEGIN");
+    // A replay is a full reconstruction from the latest snapshot of every stored
+    // provider fixture identity. Remove stale canonical keys first, including old
+    // competition-label variants, while keeping raw observations immutable.
+    if (options.replaceSnapshot) {
+      await client.query("DELETE FROM verified_settled_results");
+      await client.query("DELETE FROM canonical_fixture_evidence");
+    }
     for (const fixture of [...corroborated, ...conflicted]) {
       const status = fixture.statuses.length === 1 ? fixture.statuses[0]! : "unknown";
       const result = await client.query(
@@ -375,7 +383,7 @@ export async function replayStoredProviderObservations(): Promise<StoredObservat
     client?.release();
   }
 
-  const canonicalEvidence = await persistCanonicalEvidence(candidates);
+  const canonicalEvidence = await persistCanonicalEvidence(candidates, { replaceSnapshot: true });
   return {
     state: canonicalEvidence.state,
     latestObservationsLoaded: candidates.length,
