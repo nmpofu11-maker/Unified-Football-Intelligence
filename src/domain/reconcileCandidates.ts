@@ -102,10 +102,19 @@ export function previewCandidateReconciliation(
       const reasons: string[] = [];
       if (providers.length < 2) reasons.push("only_one_provider_observation");
       if (statuses.length > 1) reasons.push("provider_status_disagreement");
+      // A live status observed more than six hours after kickoff is stale evidence.
+      // Do not infer a final score or expose it as a current corroborated fixture.
+      const staleLiveObservation = group.some(item =>
+        item.status === "live" &&
+        Date.parse(item.observedAt) - Date.parse(item.kickoffUtc) > 6 * 60 * 60_000
+      );
+      if (staleLiveObservation) reasons.push("stale_live_status");
       if (scores.length > 1) reasons.push("provider_score_disagreement");
       if (group.some(item => item.status === "finished" && !item.score)) reasons.push("finished_observation_missing_score");
       const state: CandidateMatchState = reasons.some(reason =>
-        reason === "provider_status_disagreement" || reason === "provider_score_disagreement"
+        reason === "provider_status_disagreement" ||
+        reason === "provider_score_disagreement" ||
+        reason === "stale_live_status"
       ) ? "conflicted" : providers.length >= 2 ? "corroborated" : "single_source";
       const representative = group[0]!;
       previews.push({
