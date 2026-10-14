@@ -1,5 +1,6 @@
 import { Pool, type PoolClient } from "pg";
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
+import { previewCandidateReconciliation } from "../domain/reconcileCandidates.js";
 
 export type ObservationPersistenceState = "saved" | "connected_empty" | "not_configured" | "error";
 
@@ -84,6 +85,30 @@ async function ensureSchema(client: PoolClient): Promise<void> {
   await client.query(`
     CREATE INDEX IF NOT EXISTS provider_fixture_observations_identity_lookup_idx
     ON provider_fixture_observations (provider, provider_fixture_id)
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS canonical_fixture_evidence (
+      canonical_key TEXT PRIMARY KEY,
+      kickoff_utc TIMESTAMPTZ NOT NULL,
+      home_name TEXT NOT NULL,
+      away_name TEXT NOT NULL,
+      competition_name TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('scheduled','live','finished','postponed','cancelled','abandoned','unknown')),
+      providers TEXT[] NOT NULL,
+      evidence_state TEXT NOT NULL CHECK (evidence_state IN ('corroborated','conflicted')),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS verified_settled_results (
+      canonical_key TEXT PRIMARY KEY REFERENCES canonical_fixture_evidence(canonical_key),
+      home_goals INTEGER NOT NULL CHECK (home_goals >= 0),
+      away_goals INTEGER NOT NULL CHECK (away_goals >= 0),
+      providers TEXT[] NOT NULL,
+      evidence_state TEXT NOT NULL CHECK (evidence_state IN ('verified','conflicted')),
+      verified_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      conflict_reason TEXT
+    )
   `);
   schemaReady = true;
 }
@@ -180,6 +205,102 @@ export async function getObservationStoreStatus(): Promise<ObservationStoreStatu
     return { configured: true, state: "ready", observationCount: result.rows[0]?.count ?? 0 };
   } catch (error) {
     return { configured: true, state: "error", errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
+export interface CanonicalEvidencePersistenceResult {
+  state: "saved" | "connected_empty" | "not_configured" | "error";
+  corroboratedFixtures: number;
+  verifiedResults: number;
+  conflictedGroups: number;
+  errorCode?: string;
+}
+
+/**
+ * Persists only conservative cross-provider matches. A finished score is eligible
+ * only when at least two distinct providers agree on fixture identity, finished
+ * status, and the same score; single-source or incomplete evidence never qualifies.
+ */
+export async function persistCanonicalEvidence(
+  candidates: ProviderFixtureCandidate[]
+): Promise<CanonicalEvidencePersistenceResult> {
+  const configuredPool = getPool();
+  if (!configuredPool) {
+    return { state: "not_configured", corroboratedFixtures: 0, verifiedResults: 0, conflictedGroups: 0 };
+  }
+  const previews = previewCandidateReconciliation(candidates);
+  const corroborated = previews.filter(p => p.state === "corroborated" && p.providers.length >= 2);
+  const conflicted = previews.filter(p => p.state === "conflicted");
+  const eligibleResults = corroborated.filter(p =>
+    p.statuses.length === 1 && p.statuses[0] === "finished" &&
+    p.scores.length === 1 && !p.reasons.includes("finished_observation_missing_score")
+  );
+  let client: PoolClient | undefined;
+  let savedFixtures = 0;
+  let savedResults = 0;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    await client.query("BEGIN");
+    for (const fixture of [...corroborated, ...conflicted]) {
+      const status = fixture.statuses.length === 1 ? fixture.statuses[0]! : "unknown";
+      const result = await client.query(
+        `INSERT INTO canonical_fixture_evidence
+          (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         ON CONFLICT (canonical_key) DO UPDATE SET
+           providers = ARRAY(SELECT DISTINCT unnest(canonical_fixture_evidence.providers || EXCLUDED.providers)),
+           evidence_state = CASE WHEN canonical_fixture_evidence.evidence_state = 'conflicted' OR EXCLUDED.evidence_state = 'conflicted' THEN 'conflicted' ELSE 'corroborated' END,
+           updated_at = NOW()
+         RETURNING canonical_key`,
+        [fixture.key, fixture.kickoffUtc, fixture.home, fixture.away, fixture.competition,
+          status, fixture.providers, fixture.state === "conflicted" ? "conflicted" : "corroborated"]
+      );
+      savedFixtures += result.rowCount ?? 0;
+    }
+    for (const fixture of eligibleResults) {
+      const score = fixture.scores[0]!;
+      await client.query(
+        `INSERT INTO verified_settled_results
+          (canonical_key, home_goals, away_goals, providers, evidence_state, conflict_reason)
+         VALUES ($1,$2,$3,$4,'verified',NULL)
+         ON CONFLICT (canonical_key) DO UPDATE SET
+           evidence_state = CASE
+             WHEN verified_settled_results.home_goals = EXCLUDED.home_goals
+              AND verified_settled_results.away_goals = EXCLUDED.away_goals
+              AND verified_settled_results.evidence_state = 'verified'
+             THEN 'verified' ELSE 'conflicted' END,
+           conflict_reason = CASE
+             WHEN verified_settled_results.home_goals = EXCLUDED.home_goals
+              AND verified_settled_results.away_goals = EXCLUDED.away_goals
+             THEN verified_settled_results.conflict_reason ELSE 'subsequent_provider_score_disagreement' END,
+           providers = ARRAY(SELECT DISTINCT unnest(verified_settled_results.providers || EXCLUDED.providers)),
+           verified_at = NOW()`,
+        [fixture.key, score.home, score.away, fixture.providers]
+      );
+      savedResults += 1;
+    }
+    // A conflicted fixture invalidates any previously verified result for that key.
+    for (const fixture of conflicted) {
+      await client.query(
+        `UPDATE verified_settled_results SET evidence_state = 'conflicted',
+           conflict_reason = 'provider_status_or_score_disagreement', verified_at = NOW()
+         WHERE canonical_key = $1`,
+        [fixture.key]
+      );
+    }
+    await client.query("COMMIT");
+    return {
+      state: corroborated.length + conflicted.length === 0 ? "connected_empty" : "saved",
+      corroboratedFixtures: corroborated.length,
+      verifiedResults: eligibleResults.length,
+      conflictedGroups: conflicted.length
+    };
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => undefined);
+    return { state: "error", corroboratedFixtures: 0, verifiedResults: 0, conflictedGroups: 0, errorCode: safeErrorCode(error) };
   } finally {
     client?.release();
   }
