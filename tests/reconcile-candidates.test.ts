@@ -59,3 +59,20 @@ test("a single provider cannot corroborate its own duplicate observations", () =
   assert.equal(result.length, 2);
   assert.ok(result.every(item => item.state === "single_source"));
 });
+
+
+test("stale live status is reported separately and does not masquerade as a provider conflict", () => {
+  const stale = candidate({
+    status: "live",
+    observedAt: "2026-10-13T18:05:00.000Z"
+  });
+  const result = previewCandidateReconciliation(
+    [stale],
+    5 * 60_000,
+    Date.parse("2026-10-15T12:00:00.000Z")
+  );
+  assert.equal(result[0]?.state, "single_source");
+  assert.ok(result[0]?.reasons.includes("only_one_provider_observation"));
+  assert.ok(result[0]?.reasons.includes("stale_live_status"));
+  assert.ok(!result[0]?.reasons.includes("provider_status_disagreement"));
+});
