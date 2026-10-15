@@ -8,7 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getReviewedProviderTeamIdentityMap, getTeamRegistrySummary, getTrackedTeamRegistry, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations, saveProviderTeamMapping, syncTrackedTeamRegistry } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservedProviderTeamCandidates, getObservationStoreStatus, getObservationStoreSummary, getReviewedProviderTeamIdentityMap, getTeamRegistrySummary, getTrackedTeamRegistry, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations, saveProviderTeamMapping, syncTrackedTeamRegistry } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -178,6 +178,14 @@ app.get("/api/teams/registry", async (_req: Request, res: Response) => {
   return res.status(registry.state === "error" ? 503 : 200).json({
     ...registry,
     note: "Only explicitly reviewed provider IDs count as mappings. Seeded names and unreviewed aliases are not proof of identity."
+  });
+});
+
+app.get("/api/teams/provider-candidates", async (_req: Request, res: Response) => {
+  const result = await getObservedProviderTeamCandidates();
+  return res.status(result.state === "error" ? 503 : 200).json({
+    ...result,
+    note: "Observed provider IDs are not canonical identities until explicitly reviewed. No automatic name matching is performed."
   });
 });
 
