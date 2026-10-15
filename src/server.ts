@@ -203,8 +203,8 @@ app.post("/api/teams/canonical", async (req: Request, res: Response) => {
   if (!body || typeof body.name !== "string" || !body.name.trim() || body.name.trim().length > 200) {
     return res.status(400).json({ state: "invalid", errorCode: "invalid_canonical_team_request" });
   }
-  const name = body.name.trim().replace(/\\s+/g, " ");
-  const id = name.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase()
+  const name = body.name.trim().replace(/\s+/g, " ");
+  const id = name.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 100);
   if (!id) return res.status(400).json({ state: "invalid", errorCode: "canonical_team_name_has_no_id_characters" });
   const result = await createCanonicalTeam({ id, canonicalName: name });
@@ -315,8 +315,8 @@ document.getElementById('load-team-candidates').addEventListener('click',async()
     const registryData=await registryResponse.json();
     if(!candidateResponse.ok||!registryResponse.ok||candidateData.state!=='ready'||registryData.state!=='ready') throw new Error(candidateData.errorCode||registryData.errorCode||candidateData.state||'registry_unavailable');
     const teams=registryData.teams||[];
-    const candidates=(candidateData.candidates||[]).filter(item=>item.mappingState==='unmapped');
-    status.textContent=candidates.length+' unmapped provider identities; '+((candidateData.candidates||[]).length-candidates.length)+' already mapped.';
+    const candidates=(candidateData.candidates||[]).filter(item=>item.mappingState==='unmapped').sort((a,b)=>b.observedFixtureCount-a.observedFixtureCount||a.providerTeamName.localeCompare(b.providerTeamName)).slice(0,100);
+    status.textContent=(candidateData.count||0)+' provider identities total; showing up to '+candidates.length+' highest-frequency unmapped identities.';
     if(!candidates.length){list.textContent='No unmapped provider team IDs found in stored observations. Run a provider fixture check first.';return;}
     for(const item of candidates){
       const row=document.createElement('div');row.className='row';row.style.flexWrap='wrap';row.style.alignItems='center';
