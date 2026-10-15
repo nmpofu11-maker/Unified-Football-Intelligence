@@ -934,3 +934,52 @@ export async function saveProviderTeamMapping(input: ProviderTeamMappingInput): 
     client?.release();
   }
 }
+
+
+export interface CreateCanonicalTeamInput {
+  id: string;
+  canonicalName: string;
+}
+
+/** Creates a canonical team explicitly; does not attach any provider identity. */
+export async function createCanonicalTeam(input: CreateCanonicalTeamInput): Promise<
+  { state: "saved" | "conflict" | "invalid" | "not_configured" | "error"; team?: { id: string; canonicalName: string }; errorCode?: string }
+> {
+  const id = input.id.trim().toLowerCase();
+  const canonicalName = input.canonicalName.trim().replace(/\\s+/g, " ");
+  if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(id) || !canonicalName || canonicalName.length > 200) {
+    return { state: "invalid", errorCode: "invalid_canonical_team_fields" };
+  }
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", errorCode: "database_not_configured" };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    await client.query("BEGIN");
+    const existing = await client.query<{ team_id: string; canonical_name: string }>(
+      "SELECT team_id, canonical_name FROM canonical_team_registry WHERE team_id = $1 OR LOWER(canonical_name) = LOWER($2) FOR UPDATE",
+      [id, canonicalName]
+    );
+    if (existing.rows.length) {
+      const match = existing.rows.find(row => normalizeTeamLabel(row.canonical_name) === normalizeTeamLabel(canonicalName));
+      if (match) {
+        await client.query("COMMIT");
+        return { state: "saved", team: { id: match.team_id, canonicalName: match.canonical_name } };
+      }
+      await client.query("ROLLBACK");
+      return { state: "conflict", errorCode: "canonical_team_id_already_used" };
+    }
+    await client.query(
+      "INSERT INTO canonical_team_registry (team_id, canonical_name, aliases) VALUES ($1, $2, '{}')",
+      [id, canonicalName]
+    );
+    await client.query("COMMIT");
+    return { state: "saved", team: { id, canonicalName } };
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => undefined);
+    return { state: "error", errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
