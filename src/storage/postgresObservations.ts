@@ -110,6 +110,29 @@ async function ensureSchema(client: PoolClient): Promise<void> {
       conflict_reason TEXT
     )
   `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS canonical_team_registry (
+      team_id TEXT PRIMARY KEY,
+      canonical_name TEXT NOT NULL,
+      aliases TEXT[] NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS provider_team_mappings (
+      provider TEXT NOT NULL,
+      provider_team_id TEXT NOT NULL,
+      team_id TEXT NOT NULL REFERENCES canonical_team_registry(team_id) ON DELETE RESTRICT,
+      provider_team_name TEXT NOT NULL,
+      reviewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (provider, provider_team_id)
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS provider_team_mappings_team_idx
+    ON provider_team_mappings (team_id)
+  `);
   schemaReady = true;
 }
 
@@ -584,6 +607,228 @@ export async function getObservationStoreSummary(): Promise<ObservationStoreSumm
     };
   } catch (error) {
     return { configured: true, state: "error", errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
+
+export interface TrackedTeamSeed {
+  id: string;
+  canonicalName: string;
+  aliases?: string[];
+}
+export interface TeamRegistrySummary {
+  state: "ready" | "not_configured" | "error";
+  seededTeams: number;
+  mappedTeams: number;
+  unresolvedTeams: number;
+  providerMappings: number;
+  errorCode?: string;
+}
+export interface ProviderTeamMappingInput {
+  teamId: string;
+  provider: string;
+  providerTeamId: string;
+  providerTeamName: string;
+  confirmAlias?: boolean;
+}
+function normalizeTeamLabel(value: string): string {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+/** Synchronizes the reviewed seed names without inventing provider IDs or overwriting reviewed aliases. */
+export async function syncTrackedTeamRegistry(teams: TrackedTeamSeed[]): Promise<TeamRegistrySummary> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", seededTeams: 0, mappedTeams: 0, unresolvedTeams: 0, providerMappings: 0 };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    await client.query("BEGIN");
+    if (teams.some(team => !team.id.trim() || !team.canonicalName.trim())) throw new Error("invalid_seed_team");
+    await client.query(
+      `INSERT INTO canonical_team_registry (team_id, canonical_name, aliases)
+       SELECT x.team_id, x.canonical_name, x.aliases
+       FROM jsonb_to_recordset($1::jsonb) AS x(team_id text, canonical_name text, aliases text[])
+       ON CONFLICT (team_id) DO UPDATE SET
+         canonical_name = EXCLUDED.canonical_name,
+         aliases = ARRAY(SELECT DISTINCT unnest(canonical_team_registry.aliases || EXCLUDED.aliases)),
+         updated_at = NOW()`,
+      [JSON.stringify(teams.map(team => ({ team_id: team.id, canonical_name: team.canonicalName, aliases: team.aliases ?? [] })))]
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => undefined);
+    return { state: "error", seededTeams: 0, mappedTeams: 0, unresolvedTeams: 0, providerMappings: 0, errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+  return getTeamRegistrySummary();
+}
+
+export interface TeamRegistryEntry {
+  id: string;
+  canonicalName: string;
+  aliases: string[];
+  providerIds: Record<string, string>;
+  mappingState: "unresolved" | "mapped";
+}
+export interface TeamRegistryResult extends TeamRegistrySummary {
+  teams: TeamRegistryEntry[];
+}
+
+/** Lists canonical teams with only persisted, reviewed provider IDs. */
+export async function getTrackedTeamRegistry(): Promise<TeamRegistryResult> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", seededTeams: 0, mappedTeams: 0, unresolvedTeams: 0, providerMappings: 0, teams: [] };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{
+      team_id: string; canonical_name: string; aliases: string[];
+      provider: string | null; provider_team_id: string | null;
+    }>(`
+      SELECT t.team_id, t.canonical_name, t.aliases, m.provider, m.provider_team_id
+      FROM canonical_team_registry t
+      LEFT JOIN provider_team_mappings m ON m.team_id = t.team_id
+      ORDER BY t.canonical_name, m.provider
+    `);
+    const byId = new Map<string, TeamRegistryEntry>();
+    for (const row of result.rows) {
+      let team = byId.get(row.team_id);
+      if (!team) {
+        team = { id: row.team_id, canonicalName: row.canonical_name, aliases: row.aliases ?? [], providerIds: {}, mappingState: "unresolved" };
+        byId.set(row.team_id, team);
+      }
+      if (row.provider && row.provider_team_id) {
+        team.providerIds[row.provider] = row.provider_team_id;
+        team.mappingState = "mapped";
+      }
+    }
+    const teams = [...byId.values()];
+    const mappedTeams = teams.filter(team => team.mappingState === "mapped").length;
+    const providerMappings = teams.reduce((count, team) => count + Object.keys(team.providerIds).length, 0);
+    return {
+      state: "ready",
+      seededTeams: teams.length,
+      mappedTeams,
+      unresolvedTeams: teams.length - mappedTeams,
+      providerMappings,
+      teams
+    };
+  } catch (error) {
+    return { state: "error", seededTeams: 0, mappedTeams: 0, unresolvedTeams: 0, providerMappings: 0, teams: [], errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
+/** Returns actual persisted provider-ID mapping coverage; seed names alone are not mappings. */
+export async function getTeamRegistrySummary(): Promise<TeamRegistrySummary> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", seededTeams: 0, mappedTeams: 0, unresolvedTeams: 0, providerMappings: 0 };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{ seeded_teams: number; mapped_teams: number; provider_mappings: number }>(`
+      SELECT COUNT(*)::integer AS seeded_teams,
+        COUNT(DISTINCT t.team_id) FILTER (WHERE m.team_id IS NOT NULL)::integer AS mapped_teams,
+        (SELECT COUNT(*)::integer FROM provider_team_mappings) AS provider_mappings
+      FROM canonical_team_registry t
+      LEFT JOIN provider_team_mappings m ON m.team_id = t.team_id
+    `);
+    const row = result.rows[0];
+    const seededTeams = row?.seeded_teams ?? 0;
+    const mappedTeams = row?.mapped_teams ?? 0;
+    return { state: "ready", seededTeams, mappedTeams, unresolvedTeams: seededTeams - mappedTeams, providerMappings: row?.provider_mappings ?? 0 };
+  } catch (error) {
+    return { state: "error", seededTeams: 0, mappedTeams: 0, unresolvedTeams: 0, providerMappings: 0, errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
+/**
+ * Adds an explicitly reviewed provider ID mapping. A differing provider label is
+ * persisted as an alias only when the caller explicitly confirms that identity.
+ * Existing provider IDs are never silently reassigned to another canonical team.
+ */
+export async function saveProviderTeamMapping(input: ProviderTeamMappingInput): Promise<
+  { state: "saved" | "conflict" | "invalid" | "not_configured" | "error"; errorCode?: string; teamId?: string }
+> {
+  const provider = input.provider.trim().toLowerCase();
+  const providerTeamId = input.providerTeamId.trim();
+  const providerTeamName = input.providerTeamName.trim();
+  const teamId = input.teamId.trim();
+  if (!/^[a-z0-9][a-z0-9-]{0,49}$/.test(provider) ||
+      !providerTeamId || providerTeamId.length > 200 ||
+      !providerTeamName || providerTeamName.length > 200 ||
+      !teamId || teamId.length > 200) return { state: "invalid", errorCode: "invalid_mapping_fields" };
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", errorCode: "database_not_configured" };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    await client.query("BEGIN");
+    const found = await client.query<{ canonical_name: string; aliases: string[] }>(
+      "SELECT canonical_name, aliases FROM canonical_team_registry WHERE team_id = $1 FOR UPDATE", [teamId]
+    );
+    const team = found.rows[0];
+    if (!team) {
+      await client.query("ROLLBACK");
+      return { state: "invalid", errorCode: "canonical_team_not_found" };
+    }
+    const label = normalizeTeamLabel(providerTeamName);
+    const matchesKnownName = [team.canonical_name, ...(team.aliases ?? [])]
+      .some(name => normalizeTeamLabel(name) === label);
+    if (!matchesKnownName && input.confirmAlias !== true) {
+      await client.query("ROLLBACK");
+      return { state: "conflict", errorCode: "provider_name_requires_explicit_alias_confirmation" };
+    }
+    const allTeams = await client.query<{ team_id: string; canonical_name: string; aliases: string[] }>(
+      "SELECT team_id, canonical_name, aliases FROM canonical_team_registry WHERE team_id <> $1",
+      [teamId]
+    );
+    const duplicateAlias = allTeams.rows.some(other =>
+      [other.canonical_name, ...(other.aliases ?? [])].some(name => normalizeTeamLabel(name) === label)
+    );
+    if (duplicateAlias) {
+      await client.query("ROLLBACK");
+      return { state: "conflict", errorCode: "provider_name_alias_matches_another_canonical_team" };
+    }
+    if (!matchesKnownName) {
+      await client.query(
+        "UPDATE canonical_team_registry SET aliases = ARRAY(SELECT DISTINCT unnest(aliases || $2::text[])), updated_at = NOW() WHERE team_id = $1",
+        [teamId, [providerTeamName]]
+      );
+    }
+    const existing = await client.query<{ team_id: string; provider_team_name: string }>(
+      "SELECT team_id, provider_team_name FROM provider_team_mappings WHERE provider = $1 AND provider_team_id = $2 FOR UPDATE",
+      [provider, providerTeamId]
+    );
+    if (existing.rows.length) {
+      const current = existing.rows[0]!;
+      if (current.team_id !== teamId || normalizeTeamLabel(current.provider_team_name) !== label) {
+        await client.query("ROLLBACK");
+        return { state: "conflict", errorCode: "provider_team_id_already_mapped_differently" };
+      }
+      await client.query("COMMIT");
+      return { state: "saved", teamId };
+    }
+    await client.query(
+      "INSERT INTO provider_team_mappings (provider, provider_team_id, team_id, provider_team_name) VALUES ($1, $2, $3, $4)",
+      [provider, providerTeamId, teamId, providerTeamName]
+    );
+    await client.query("COMMIT");
+    return { state: "saved", teamId };
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => undefined);
+    return { state: "error", errorCode: safeErrorCode(error) };
   } finally {
     client?.release();
   }
