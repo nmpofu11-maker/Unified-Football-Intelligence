@@ -134,8 +134,10 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     reconciliationPreview: reconciliationPreview.slice(0, 20),
     sampleCandidates: candidates.slice(0, 8).map(candidate => ({
       provider: candidate.provider, providerFixtureId: candidate.providerFixtureId, kickoffUtc: candidate.kickoffUtc,
-      home: candidate.home.name, away: candidate.away.name, competition: candidate.competition.name,
-      status: candidate.status, ...(candidate.score ? { score: candidate.score } : {}), evidenceState: candidate.evidenceState
+      home: candidate.home.name, ...(candidate.home.providerTeamId ? { homeProviderTeamId: candidate.home.providerTeamId } : {}),
+      away: candidate.away.name, ...(candidate.away.providerTeamId ? { awayProviderTeamId: candidate.away.providerTeamId } : {}),
+      competition: candidate.competition.name, status: candidate.status,
+      ...(candidate.score ? { score: candidate.score } : {}), evidenceState: candidate.evidenceState
     })),
     providers
   };
