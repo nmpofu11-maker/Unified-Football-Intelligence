@@ -647,18 +647,17 @@ export async function syncTrackedTeamRegistry(teams: TrackedTeamSeed[]): Promise
     client = await configuredPool.connect();
     await ensureSchema(client);
     await client.query("BEGIN");
-    for (const team of teams) {
-      if (!team.id.trim() || !team.canonicalName.trim()) throw new Error("invalid_seed_team");
-      await client.query(
-        `INSERT INTO canonical_team_registry (team_id, canonical_name, aliases)
-         VALUES ($1, $2, $3::text[])
-         ON CONFLICT (team_id) DO UPDATE SET
-           canonical_name = EXCLUDED.canonical_name,
-           aliases = ARRAY(SELECT DISTINCT unnest(canonical_team_registry.aliases || EXCLUDED.aliases)),
-           updated_at = NOW()`,
-        [team.id, team.canonicalName, team.aliases ?? []]
-      );
-    }
+    if (teams.some(team => !team.id.trim() || !team.canonicalName.trim())) throw new Error("invalid_seed_team");
+    await client.query(
+      `INSERT INTO canonical_team_registry (team_id, canonical_name, aliases)
+       SELECT x.team_id, x.canonical_name, x.aliases
+       FROM jsonb_to_recordset($1::jsonb) AS x(team_id text, canonical_name text, aliases text[])
+       ON CONFLICT (team_id) DO UPDATE SET
+         canonical_name = EXCLUDED.canonical_name,
+         aliases = ARRAY(SELECT DISTINCT unnest(canonical_team_registry.aliases || EXCLUDED.aliases)),
+         updated_at = NOW()`,
+      [JSON.stringify(teams.map(team => ({ team_id: team.id, canonical_name: team.canonicalName, aliases: team.aliases ?? [] })))]
+    );
     await client.query("COMMIT");
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => undefined);
@@ -734,6 +733,17 @@ export async function saveProviderTeamMapping(input: ProviderTeamMappingInput): 
       return { state: "conflict", errorCode: "provider_name_requires_explicit_alias_confirmation" };
     }
     if (!matchesKnownName) {
+      const allTeams = await client.query<{ team_id: string; canonical_name: string; aliases: string[] }>(
+        "SELECT team_id, canonical_name, aliases FROM canonical_team_registry WHERE team_id <> $1",
+        [teamId]
+      );
+      const duplicateAlias = allTeams.rows.some(other =>
+        [other.canonical_name, ...(other.aliases ?? [])].some(name => normalizeTeamLabel(name) === label)
+      );
+      if (duplicateAlias) {
+        await client.query("ROLLBACK");
+        return { state: "conflict", errorCode: "provider_name_alias_matches_another_canonical_team" };
+      }
       await client.query(
         "UPDATE canonical_team_registry SET aliases = ARRAY(SELECT DISTINCT unnest(aliases || $2::text[])), updated_at = NOW() WHERE team_id = $1",
         [teamId, [providerTeamName]]
