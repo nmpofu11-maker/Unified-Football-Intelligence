@@ -357,6 +357,14 @@ document.getElementById('load-team-candidates').addEventListener('click',async()
       const select=document.createElement('select');select.setAttribute('aria-label','Canonical team for '+item.providerTeamName);
       const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Select verified canonical team';select.appendChild(placeholder);
       for(const team of teams){const option=document.createElement('option');option.value=team.id;option.textContent=team.canonicalName+' ('+team.id+')';select.appendChild(option);}
+      // Offer only a strict normalized-name suggestion. This never saves a mapping;
+      // an operator must still review the team and explicitly press Save.
+      const normalizeIdentityName=value=>String(value||'').normalize('NFKD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim().replace(/\\s+/g,' ');
+      const exactMatches=teams.filter(team=>normalizeIdentityName(team.canonicalName)===normalizeIdentityName(item.providerTeamName));
+      const suggestion=document.createElement('span');suggestion.className='small';
+      if(exactMatches.length===1){select.value=exactMatches[0].id;suggestion.textContent='Exact normalized-name suggestion only — review before saving.';}
+      else if(exactMatches.length>1){suggestion.textContent='Multiple exact-name candidates; choose the correct identity manually.';}
+      else{suggestion.textContent='No exact-name suggestion. Search or create a canonical team after checking the competition.';}
       const search=document.getElementById('canonical-team-search');
       const filterTeams=()=>{const q=search.value.trim().toLocaleLowerCase();for(const option of Array.from(select.options).slice(1)){option.hidden=Boolean(q)&&!option.textContent.toLocaleLowerCase().includes(q);}};
       search.addEventListener('input',filterTeams);
@@ -376,7 +384,7 @@ document.getElementById('load-team-candidates').addEventListener('click',async()
           row.style.opacity='0.6';select.disabled=true;alias.disabled=true;save.disabled=true;result.textContent='Saved. Refresh list to verify.';
         }catch(error){result.textContent='Not saved: '+String(error.message||error);save.disabled=false;}
       });
-      row.append(detail,select,aliasLabel,create,save,result);list.appendChild(row);
+      row.append(detail,select,suggestion,aliasLabel,create,save,result);list.appendChild(row);
     }
   }catch(error){status.textContent='Could not load review list: '+String(error.message||error);}
 });
