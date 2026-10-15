@@ -233,6 +233,30 @@ export async function getObservationStoreStatus(): Promise<ObservationStoreStatu
   }
 }
 
+/** Loads only explicitly reviewed provider IDs; missing mappings never fall back to names when IDs were supplied. */
+export async function getReviewedProviderTeamIdentityMap(): Promise<Record<string, string>> {
+  const configuredPool = getPool();
+  if (!configuredPool) return {};
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{ provider: string; provider_team_id: string; team_id: string }>(
+      "SELECT provider, provider_team_id, team_id FROM provider_team_mappings"
+    );
+    const identities: Record<string, string> = {};
+    for (const row of result.rows) {
+      identities[`${row.provider}:${row.provider_team_id}`] = row.team_id;
+    }
+    return identities;
+  } catch {
+    // Fail closed: no provider IDs are considered reviewed if the mapping store cannot be read.
+    return {};
+  } finally {
+    client?.release();
+  }
+}
+
 export interface CanonicalEvidencePersistenceResult {
   state: "saved" | "connected_empty" | "not_configured" | "error";
   corroboratedFixtures: number;
@@ -254,7 +278,8 @@ export async function persistCanonicalEvidence(
   if (!configuredPool) {
     return { state: "not_configured", corroboratedFixtures: 0, verifiedResults: 0, conflictedGroups: 0 };
   }
-  const previews = previewCandidateReconciliation(candidates);
+  const reviewedTeamIds = await getReviewedProviderTeamIdentityMap();
+  const previews = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
   const corroborated = previews.filter(p => p.state === "corroborated" && p.providers.length >= 2);
   const conflicted = previews.filter(p => p.state === "conflicted");
   const eligibleResults = corroborated.filter(p =>
@@ -446,7 +471,8 @@ export async function replayStoredProviderObservations(): Promise<StoredObservat
 
   // Return safe aggregate diagnostics so the operator can identify why stored
   // provider observations fail to reconcile, without exposing raw payloads or secrets.
-  const previews = previewCandidateReconciliation(candidates);
+  const reviewedTeamIds = await getReviewedProviderTeamIdentityMap();
+  const previews = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
   const conflictReasonCounts: Record<string, number> = {};
   for (const preview of previews.filter(item => item.state === "conflicted")) {
     for (const reason of preview.reasons) {
