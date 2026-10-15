@@ -257,6 +257,81 @@ export async function getReviewedProviderTeamIdentityMap(): Promise<Record<strin
   }
 }
 
+export interface ObservedProviderTeamCandidate {
+  provider: string;
+  providerTeamId: string;
+  providerTeamName: string;
+  observedFixtureCount: number;
+  lastObservedAt: string;
+  mappingState: "unmapped" | "mapped";
+  canonicalTeamId?: string;
+  canonicalTeamName?: string;
+}
+
+/** Lists provider team identities from the latest raw observations without guessing canonical matches. */
+export async function getObservedProviderTeamCandidates(): Promise<{
+  state: "ready" | "not_configured" | "error";
+  count: number;
+  candidates: ObservedProviderTeamCandidate[];
+  errorCode?: string;
+}> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", count: 0, candidates: [] };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{
+      provider: string; provider_team_id: string; provider_team_name: string;
+      observed_fixture_count: number; last_observed_at: string;
+      canonical_team_id: string | null; canonical_team_name: string | null;
+    }>(`
+      WITH latest AS (
+        SELECT DISTINCT ON (provider, provider_fixture_id)
+          provider, provider_fixture_id, observed_at, observation
+        FROM provider_fixture_observations
+        ORDER BY provider, provider_fixture_id, observed_at DESC, id DESC
+      ), team_occurrences AS (
+        SELECT provider, provider_fixture_id, observed_at,
+          NULLIF(observation->'home'->>'providerTeamId', '') AS provider_team_id,
+          observation->'home'->>'name' AS provider_team_name
+        FROM latest
+        UNION ALL
+        SELECT provider, provider_fixture_id, observed_at,
+          NULLIF(observation->'away'->>'providerTeamId', '') AS provider_team_id,
+          observation->'away'->>'name' AS provider_team_name
+        FROM latest
+      )
+      SELECT o.provider, o.provider_team_id, MIN(o.provider_team_name) AS provider_team_name,
+        COUNT(DISTINCT o.provider_fixture_id)::integer AS observed_fixture_count,
+        MAX(o.observed_at)::text AS last_observed_at,
+        m.team_id AS canonical_team_id, t.canonical_name AS canonical_team_name
+      FROM team_occurrences o
+      LEFT JOIN provider_team_mappings m
+        ON m.provider = o.provider AND m.provider_team_id = o.provider_team_id
+      LEFT JOIN canonical_team_registry t ON t.team_id = m.team_id
+      WHERE o.provider_team_id IS NOT NULL AND COALESCE(o.provider_team_name, '') <> ''
+      GROUP BY o.provider, o.provider_team_id, m.team_id, t.canonical_name
+      ORDER BY (m.team_id IS NOT NULL), o.provider, MIN(o.provider_team_name)
+    `);
+    const candidates = result.rows.map(row => ({
+      provider: row.provider,
+      providerTeamId: row.provider_team_id,
+      providerTeamName: row.provider_team_name,
+      observedFixtureCount: row.observed_fixture_count,
+      lastObservedAt: row.last_observed_at,
+      mappingState: row.canonical_team_id ? "mapped" as const : "unmapped" as const,
+      ...(row.canonical_team_id ? { canonicalTeamId: row.canonical_team_id } : {}),
+      ...(row.canonical_team_name ? { canonicalTeamName: row.canonical_team_name } : {})
+    }));
+    return { state: "ready", count: candidates.length, candidates };
+  } catch (error) {
+    return { state: "error", count: 0, candidates: [], errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
 export interface CanonicalEvidencePersistenceResult {
   state: "saved" | "connected_empty" | "not_configured" | "error";
   corroboratedFixtures: number;
