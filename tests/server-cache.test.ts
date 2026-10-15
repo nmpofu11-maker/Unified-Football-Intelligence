@@ -38,6 +38,9 @@ test("fixture endpoint distinguishes fresh provider checks from cache hits", { t
       ...process.env,
       NODE_ENV: "test",
       PORT: String(port),
+      // This endpoint test verifies cache semantics, not external PostgreSQL connectivity.
+      // Isolate it from a developer .env so an unreachable remote DB cannot stall the test.
+      DATABASE_URL: "",
       SPORTAPI_AI_KEY: "",
       SPORTAPI_API_KEY: "",
       SPORTMONKS_API_KEY: "",
