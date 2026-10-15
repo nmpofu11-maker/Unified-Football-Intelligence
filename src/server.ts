@@ -172,8 +172,8 @@ app.post("/api/history/replay", async (req: Request, res: Response) => {
 
 
 app.get("/api/teams/registry", async (_req: Request, res: Response) => {
-  const seeded = await syncTrackedTeamRegistry(teamSeed.teams);
-  const registry = seeded.state === "ready" ? await getTrackedTeamRegistry() : await getTrackedTeamRegistry();
+  await syncTrackedTeamRegistry(teamSeed.teams);
+  const registry = await getTrackedTeamRegistry();
   return res.status(registry.state === "error" ? 503 : 200).json({
     ...registry,
     note: "Only explicitly reviewed provider IDs count as mappings. Seeded names and unreviewed aliases are not proof of identity."
