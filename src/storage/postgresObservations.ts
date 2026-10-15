@@ -634,8 +634,8 @@ export interface ProviderTeamMappingInput {
   confirmAlias?: boolean;
 }
 function normalizeTeamLabel(value: string): string {
-  return value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
 /** Synchronizes the reviewed seed names without inventing provider IDs or overwriting reviewed aliases. */
