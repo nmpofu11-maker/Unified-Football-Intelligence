@@ -371,10 +371,24 @@ export async function persistCanonicalEvidence(
     client = await configuredPool.connect();
     await ensureSchema(client);
     await client.query("BEGIN");
-    // A replay is a full reconstruction from the latest snapshot of every stored
-    // provider fixture identity. Remove stale canonical keys first, including old
-    // competition-label variants, while keeping raw observations immutable.
-    if (options.replaceSnapshot && candidates.length > 0) {
+    // A replay is a full reconstruction only when every stored candidate's
+    // supplied provider IDs have an explicitly reviewed, distinct canonical identity.
+    // Otherwise a partial mapping review could delete previously verified evidence
+    // simply because currently-unmapped candidates are excluded from reconciliation.
+    // Keep the existing snapshot until identity coverage is complete; upserts below
+    // still allow newly reconciled evidence to be added safely.
+    const snapshotIdentityComplete = candidates.every(candidate => {
+      const homeProviderId = candidate.home.providerTeamId?.trim();
+      const awayProviderId = candidate.away.providerTeamId?.trim();
+      if (!homeProviderId && !awayProviderId) return true;
+      if (!homeProviderId || !awayProviderId) return false;
+      const homeTeamId = reviewedTeamIds[`${candidate.provider}:${homeProviderId}`];
+      const awayTeamId = reviewedTeamIds[`${candidate.provider}:${awayProviderId}`];
+      return Boolean(homeTeamId && awayTeamId && homeTeamId !== awayTeamId);
+    });
+    if (options.replaceSnapshot && candidates.length > 0 && snapshotIdentityComplete) {
+      // Full identity coverage allows stale canonical keys (including old
+      // competition-label variants) to be removed before rebuilding the snapshot.
       await client.query("DELETE FROM verified_settled_results");
       await client.query("DELETE FROM canonical_fixture_evidence");
     }
