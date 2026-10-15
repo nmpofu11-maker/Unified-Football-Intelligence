@@ -312,7 +312,10 @@ export async function getObservedProviderTeamCandidates(): Promise<{
       LEFT JOIN canonical_team_registry t ON t.team_id = m.team_id
       WHERE o.provider_team_id IS NOT NULL AND COALESCE(o.provider_team_name, '') <> ''
       GROUP BY o.provider, o.provider_team_id, m.team_id, t.canonical_name
-      ORDER BY (m.team_id IS NOT NULL), o.provider, MIN(o.provider_team_name)
+      -- Keep unmapped identities first, prioritising teams seen in the most fixtures.
+      -- This makes operator review more efficient without guessing or auto-approving identities.
+      ORDER BY (m.team_id IS NOT NULL), COUNT(DISTINCT o.provider_fixture_id) DESC,
+        MAX(o.observed_at) DESC, o.provider, MIN(o.provider_team_name)
     `);
     const candidates = result.rows.map(row => ({
       provider: row.provider,
