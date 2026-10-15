@@ -732,18 +732,18 @@ export async function saveProviderTeamMapping(input: ProviderTeamMappingInput): 
       await client.query("ROLLBACK");
       return { state: "conflict", errorCode: "provider_name_requires_explicit_alias_confirmation" };
     }
+    const allTeams = await client.query<{ team_id: string; canonical_name: string; aliases: string[] }>(
+      "SELECT team_id, canonical_name, aliases FROM canonical_team_registry WHERE team_id <> $1",
+      [teamId]
+    );
+    const duplicateAlias = allTeams.rows.some(other =>
+      [other.canonical_name, ...(other.aliases ?? [])].some(name => normalizeTeamLabel(name) === label)
+    );
+    if (duplicateAlias) {
+      await client.query("ROLLBACK");
+      return { state: "conflict", errorCode: "provider_name_alias_matches_another_canonical_team" };
+    }
     if (!matchesKnownName) {
-      const allTeams = await client.query<{ team_id: string; canonical_name: string; aliases: string[] }>(
-        "SELECT team_id, canonical_name, aliases FROM canonical_team_registry WHERE team_id <> $1",
-        [teamId]
-      );
-      const duplicateAlias = allTeams.rows.some(other =>
-        [other.canonical_name, ...(other.aliases ?? [])].some(name => normalizeTeamLabel(name) === label)
-      );
-      if (duplicateAlias) {
-        await client.query("ROLLBACK");
-        return { state: "conflict", errorCode: "provider_name_alias_matches_another_canonical_team" };
-      }
       await client.query(
         "UPDATE canonical_team_registry SET aliases = ARRAY(SELECT DISTINCT unnest(aliases || $2::text[])), updated_at = NOW() WHERE team_id = $1",
         [teamId, [providerTeamName]]
