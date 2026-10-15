@@ -304,7 +304,6 @@ app.get("/", (_req: Request, res: Response) => res.type("html").send(`<!doctype 
 document.getElementById('load-team-candidates').addEventListener('click',async()=>{
   const status=document.getElementById('team-review-status');
   const list=document.getElementById('team-review-list');
-  const token=document.getElementById('provider-token').value;
   status.textContent='Loading provider identities and canonical teams…'; list.replaceChildren();
   try{
     const [candidateResponse,registryResponse]=await Promise.all([
@@ -331,10 +330,11 @@ document.getElementById('load-team-candidates').addEventListener('click',async()
       search.addEventListener('input',filterTeams);
       const aliasLabel=document.createElement('label');const alias=document.createElement('input');alias.type='checkbox';aliasLabel.append(alias,document.createTextNode(' Confirm different name is same team'));
       const create=document.createElement('button');create.textContent='Create new canonical team';
-      create.addEventListener('click',async()=>{if(!token){result.textContent='Enter the diagnostics token above first.';return;}create.disabled=true;result.textContent='Creating canonical team…';try{const response=await fetch('/api/teams/canonical',{method:'POST',headers:{'content-type':'application/json','x-provider-diagnostics-token':token},body:JSON.stringify({name:item.providerTeamName})});const body=await response.json();if(!response.ok||body.state!=='saved'||!body.team)throw new Error(body.errorCode||body.state||'create_team_failed');let option=Array.from(select.options).find(o=>o.value===body.team.id);if(!option){option=document.createElement('option');option.value=body.team.id;option.textContent=body.team.canonicalName+' ('+body.team.id+')';select.appendChild(option);}select.value=body.team.id;alias.checked=false;result.textContent='Canonical team ready. Confirm this is a distinct team, then save its provider mapping.';}catch(error){result.textContent='Team not created: '+String(error.message||error);}finally{create.disabled=false;}});\n      const save=document.createElement('button');save.textContent='Save reviewed mapping';
+      create.addEventListener('click',async()=>{const token=document.getElementById('provider-token').value;if(!token){result.textContent='Enter the diagnostics token above first.';return;}create.disabled=true;result.textContent='Creating canonical team…';try{const response=await fetch('/api/teams/canonical',{method:'POST',headers:{'content-type':'application/json','x-provider-diagnostics-token':token},body:JSON.stringify({name:item.providerTeamName})});const body=await response.json();if(!response.ok||body.state!=='saved'||!body.team)throw new Error(body.errorCode||body.state||'create_team_failed');let option=Array.from(select.options).find(o=>o.value===body.team.id);if(!option){option=document.createElement('option');option.value=body.team.id;option.textContent=body.team.canonicalName+' ('+body.team.id+')';select.appendChild(option);}select.value=body.team.id;alias.checked=false;result.textContent='Canonical team ready. Confirm this is a distinct team, then save its provider mapping.';}catch(error){result.textContent='Team not created: '+String(error.message||error);}finally{create.disabled=false;}});\n      const save=document.createElement('button');save.textContent='Save reviewed mapping';
       const result=document.createElement('span');result.className='small';
       save.addEventListener('click',async()=>{
         if(!select.value){result.textContent='Choose a canonical team first.';return;}
+        const token=document.getElementById('provider-token').value;
         if(!token){result.textContent='Enter the diagnostics token above first.';return;}
         save.disabled=true;result.textContent='Saving…';
         try{
