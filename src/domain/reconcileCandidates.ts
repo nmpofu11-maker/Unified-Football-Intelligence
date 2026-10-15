@@ -118,9 +118,14 @@ export function previewCandidateReconciliation(
       // providers disagree. Keep it visible in reasons, but do not inflate the
       // conflict count or let that label alone classify a fixture as conflicted.
       // Stale live fixtures are separately filtered from the canonical read model.
+      // Keep stale live observations in the blocked/conflicted state so they can
+      // never enter the canonical corroborated read model. The stale_live_status
+      // reason and staleLiveGroups diagnostic distinguish freshness blocks from
+      // genuine cross-provider status/score disagreements.
       const state: CandidateMatchState = reasons.some(reason =>
         reason === "provider_status_disagreement" ||
-        reason === "provider_score_disagreement"
+        reason === "provider_score_disagreement" ||
+        reason === "stale_live_status"
       ) ? "conflicted" : providers.length >= 2 ? "corroborated" : "single_source";
       const representative = group[0]!;
       previews.push({
