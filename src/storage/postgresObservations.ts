@@ -668,6 +668,56 @@ export async function syncTrackedTeamRegistry(teams: TrackedTeamSeed[]): Promise
   return getTeamRegistrySummary();
 }
 
+export interface TeamRegistryEntry {
+  id: string;
+  canonicalName: string;
+  aliases: string[];
+  providerIds: Record<string, string>;
+  mappingState: "unresolved" | "mapped";
+}
+export interface TeamRegistryResult extends TeamRegistrySummary {
+  teams: TeamRegistryEntry[];
+}
+
+/** Lists canonical teams with only persisted, reviewed provider IDs. */
+export async function getTrackedTeamRegistry(): Promise<TeamRegistryResult> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", seededTeams: 0, mappedTeams: 0, unresolvedTeams: 0, providerMappings: 0, teams: [] };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{
+      team_id: string; canonical_name: string; aliases: string[];
+      provider: string | null; provider_team_id: string | null;
+    }>(`
+      SELECT t.team_id, t.canonical_name, t.aliases, m.provider, m.provider_team_id
+      FROM canonical_team_registry t
+      LEFT JOIN provider_team_mappings m ON m.team_id = t.team_id
+      ORDER BY t.canonical_name, m.provider
+    `);
+    const byId = new Map<string, TeamRegistryEntry>();
+    for (const row of result.rows) {
+      let team = byId.get(row.team_id);
+      if (!team) {
+        team = { id: row.team_id, canonicalName: row.canonical_name, aliases: row.aliases ?? [], providerIds: {}, mappingState: "unresolved" };
+        byId.set(row.team_id, team);
+      }
+      if (row.provider && row.provider_team_id) {
+        team.providerIds[row.provider] = row.provider_team_id;
+        team.mappingState = "mapped";
+      }
+    }
+    const teams = [...byId.values()];
+    const summary = await getTeamRegistrySummary();
+    return { ...summary, teams };
+  } catch (error) {
+    return { state: "error", seededTeams: 0, mappedTeams: 0, unresolvedTeams: 0, providerMappings: 0, teams: [], errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
 /** Returns actual persisted provider-ID mapping coverage; seed names alone are not mappings. */
 export async function getTeamRegistrySummary(): Promise<TeamRegistrySummary> {
   const configuredPool = getPool();
