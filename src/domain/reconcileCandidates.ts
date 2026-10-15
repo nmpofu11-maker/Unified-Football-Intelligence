@@ -1,6 +1,6 @@
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
 
-export type CandidateMatchState = "single_source" | "corroborated" | "conflicted";
+export type CandidateMatchState = "single_source" | "corroborated" | "conflicted" | "stale";
 
 export interface CandidateMatchPreview {
   key: string;
@@ -114,19 +114,18 @@ export function previewCandidateReconciliation(
       if (staleLiveObservation) reasons.push("stale_live_status");
       if (scores.length > 1) reasons.push("provider_score_disagreement");
       if (group.some(item => item.status === "finished" && !item.score)) reasons.push("finished_observation_missing_score");
-      // A stale live label is a freshness/availability problem, not evidence that
-      // providers disagree. Keep it visible in reasons, but do not inflate the
-      // conflict count or let that label alone classify a fixture as conflicted.
-      // Stale live fixtures are separately filtered from the canonical read model.
-      // Keep stale live observations in the blocked/conflicted state so they can
-      // never enter the canonical corroborated read model. The stale_live_status
-      // reason and staleLiveGroups diagnostic distinguish freshness blocks from
-      // genuine cross-provider status/score disagreements.
-      const state: CandidateMatchState = reasons.some(reason =>
+      // Freshness is distinct from provider disagreement. Stale-only groups are
+      // explicitly blocked as "stale"; genuine status/score disagreements remain
+      // "conflicted". Only corroborated groups can enter the canonical read model.
+      const hasProviderConflict = reasons.some(reason =>
         reason === "provider_status_disagreement" ||
-        reason === "provider_score_disagreement" ||
-        reason === "stale_live_status"
-      ) ? "conflicted" : providers.length >= 2 ? "corroborated" : "single_source";
+        reason === "provider_score_disagreement"
+      );
+      const state: CandidateMatchState = hasProviderConflict
+        ? "conflicted"
+        : staleLiveObservation
+          ? "stale"
+          : providers.length >= 2 ? "corroborated" : "single_source";
       const representative = group[0]!;
       previews.push({
         key: `${key}|${Math.min(...group.map(item => Date.parse(item.kickoffUtc))) }`,
