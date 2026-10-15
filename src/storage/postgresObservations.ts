@@ -252,12 +252,29 @@ export async function persistCanonicalEvidence(
       await client.query("DELETE FROM verified_settled_results");
       await client.query("DELETE FROM canonical_fixture_evidence");
     }
-    for (const fixture of [...corroborated, ...conflicted]) {
-      const status = fixture.statuses.length === 1 ? fixture.statuses[0]! : "unknown";
-      const result = await client.query(
+    // Batch canonical writes instead of issuing one network round-trip per fixture.
+    // Replay commonly handles hundreds of candidates; sequential queries can exceed
+    // HTTP timeouts even when the database itself is healthy.
+    const fixtureRows = [...corroborated, ...conflicted].map(fixture => ({
+      canonical_key: fixture.key,
+      kickoff_utc: fixture.kickoffUtc,
+      home_name: fixture.home,
+      away_name: fixture.away,
+      competition_name: fixture.competition,
+      status: fixture.statuses.length === 1 ? fixture.statuses[0]! : "unknown",
+      providers: fixture.providers,
+      evidence_state: fixture.state === "conflicted" ? "conflicted" : "corroborated"
+    }));
+    if (fixtureRows.length > 0) {
+      const fixtureWrite = await client.query(
         `INSERT INTO canonical_fixture_evidence
           (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         SELECT x.canonical_key, x.kickoff_utc, x.home_name, x.away_name, x.competition_name,
+                x.status, x.providers, x.evidence_state
+         FROM jsonb_to_recordset($1::jsonb) AS x(
+           canonical_key text, kickoff_utc timestamptz, home_name text, away_name text,
+           competition_name text, status text, providers text[], evidence_state text
+         )
          ON CONFLICT (canonical_key) DO UPDATE SET
            kickoff_utc = EXCLUDED.kickoff_utc,
            home_name = EXCLUDED.home_name,
@@ -268,17 +285,25 @@ export async function persistCanonicalEvidence(
            evidence_state = CASE WHEN canonical_fixture_evidence.evidence_state = 'conflicted' OR EXCLUDED.evidence_state = 'conflicted' THEN 'conflicted' ELSE 'corroborated' END,
            updated_at = NOW()
          RETURNING canonical_key`,
-        [fixture.key, fixture.kickoffUtc, fixture.home, fixture.away, fixture.competition,
-          status, fixture.providers, fixture.state === "conflicted" ? "conflicted" : "corroborated"]
+        [JSON.stringify(fixtureRows)]
       );
-      savedFixtures += result.rowCount ?? 0;
+      savedFixtures = fixtureWrite.rowCount ?? 0;
     }
-    for (const fixture of eligibleResults) {
-      const score = fixture.scores[0]!;
+
+    const resultRows = eligibleResults.map(fixture => ({
+      canonical_key: fixture.key,
+      home_goals: fixture.scores[0]!.home,
+      away_goals: fixture.scores[0]!.away,
+      providers: fixture.providers
+    }));
+    if (resultRows.length > 0) {
       await client.query(
         `INSERT INTO verified_settled_results
           (canonical_key, home_goals, away_goals, providers, evidence_state, conflict_reason)
-         VALUES ($1,$2,$3,$4,'verified',NULL)
+         SELECT x.canonical_key, x.home_goals, x.away_goals, x.providers, 'verified', NULL
+         FROM jsonb_to_recordset($1::jsonb) AS x(
+           canonical_key text, home_goals integer, away_goals integer, providers text[]
+         )
          ON CONFLICT (canonical_key) DO UPDATE SET
            evidence_state = CASE
              WHEN verified_settled_results.home_goals = EXCLUDED.home_goals
@@ -291,17 +316,17 @@ export async function persistCanonicalEvidence(
              THEN verified_settled_results.conflict_reason ELSE 'subsequent_provider_score_disagreement' END,
            providers = ARRAY(SELECT DISTINCT unnest(verified_settled_results.providers || EXCLUDED.providers)),
            verified_at = NOW()`,
-        [fixture.key, score.home, score.away, fixture.providers]
+        [JSON.stringify(resultRows)]
       );
-      savedResults += 1;
+      savedResults = resultRows.length;
     }
-    // A conflicted fixture invalidates any previously verified result for that key.
-    for (const fixture of conflicted) {
+
+    if (conflicted.length > 0) {
       await client.query(
         `UPDATE verified_settled_results SET evidence_state = 'conflicted',
            conflict_reason = 'provider_status_or_score_disagreement', verified_at = NOW()
-         WHERE canonical_key = $1`,
-        [fixture.key]
+         WHERE canonical_key = ANY($1::text[])`,
+        [conflicted.map(fixture => fixture.key)]
       );
     }
     await client.query("COMMIT");
