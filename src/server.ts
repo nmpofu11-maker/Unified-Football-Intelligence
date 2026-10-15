@@ -8,7 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getTeamRegistrySummary, getTrackedTeamRegistry, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations, saveProviderTeamMapping, syncTrackedTeamRegistry } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getReviewedProviderTeamIdentityMap, getTeamRegistrySummary, getTrackedTeamRegistry, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations, saveProviderTeamMapping, syncTrackedTeamRegistry } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -111,7 +111,8 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
   const candidates = [...sportApiAi, ...sportmonks, ...apiFootball];
   const persistence = await persistProviderObservations(candidates);
   const canonicalEvidence = await persistCanonicalEvidence(candidates);
-  const reconciliationPreview = previewCandidateReconciliation(candidates);
+  const reviewedTeamIds = await getReviewedProviderTeamIdentityMap();
+  const reconciliationPreview = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
   const byStatus: Record<string, number> = {};
   for (const candidate of candidates) byStatus[candidate.status] = (byStatus[candidate.status] ?? 0) + 1;
   const payload = {
