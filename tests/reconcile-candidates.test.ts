@@ -71,7 +71,7 @@ test("stale live status is reported separately and does not masquerade as a prov
     5 * 60_000,
     Date.parse("2026-10-15T12:00:00.000Z")
   );
-  assert.equal(result[0]?.state, "single_source");
+  assert.equal(result[0]?.state, "stale");
   assert.ok(result[0]?.reasons.includes("only_one_provider_observation"));
   assert.ok(result[0]?.reasons.includes("stale_live_status"));
   assert.ok(!result[0]?.reasons.includes("provider_status_disagreement"));
