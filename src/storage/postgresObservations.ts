@@ -353,6 +353,7 @@ export interface StoredObservationReplayResult {
     singleSourceGroups: number;
     corroboratedGroups: number;
     conflictedGroups: number;
+    staleLiveGroups: number;
     conflictReasonCounts: Record<string, number>;
     conflictSamples: Array<{
       home: string; away: string; competition: string; kickoffUtc: string;
@@ -434,6 +435,7 @@ export async function replayStoredProviderObservations(): Promise<StoredObservat
     singleSourceGroups: previews.filter(item => item.state === "single_source").length,
     corroboratedGroups: previews.filter(item => item.state === "corroborated").length,
     conflictedGroups: previews.filter(item => item.state === "conflicted").length,
+    staleLiveGroups: previews.filter(item => item.reasons.includes("stale_live_status")).length,
     conflictReasonCounts,
     conflictSamples: previews.filter(item => item.state === "conflicted").slice(0, 10).map(item => ({
       home: item.home, away: item.away, competition: item.competition, kickoffUtc: item.kickoffUtc,
