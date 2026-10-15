@@ -17,7 +17,9 @@ Monitor broadly, build deeper verified histories for the original 80 priority te
 - Conservative team/competition identity resolution: provider IDs must agree with names; unknown or ambiguous names are blocked rather than fuzzy-matched.
 - SportAPI.ai, Sportmonks and API-Football on-demand fixture adapters with separate diagnostics for empty success, partial data, rate limits, authentication errors, malformed payloads and network errors.
 - An API endpoint `/api/providers/fixtures?date=YYYY-MM-DD` that returns raw-normalized provider observations as **unverified candidates**.
-- A conservative cross-provider reconciliation preview; it does not create canonical fixtures or verify results.
+- PostgreSQL-backed canonical evidence replay that promotes only cross-provider-corroborated fixtures; settled scores require independent providers to agree on fixture identity, finished status and score.
+- Persistent canonical team registry and provider-specific identity mappings, with explicit operator review and fail-closed handling for unmapped provider IDs.
+- Canonical evidence promotion is blocked when raw observation persistence fails; raw observations remain unverified and immutable.
 - PostgreSQL-backed append-only storage for valid provider observations marked `unverified`, with deduplication and provenance. The database must be configured and verified at runtime before this path can save records.
 - A transparent Poisson baseline that uses only verified, settled historical results strictly before the prediction cutoff and abstains when minimum history is missing.
 - A separate odds/value assessment that withholds betting recommendations for uncalibrated forecasts, stale/missing odds or mismatched fixtures.
@@ -27,7 +29,8 @@ Monitor broadly, build deeper verified histories for the original 80 priority te
 
 - No database connection has yet been verified in the target environment. `DATABASE_URL` being present is not enough; `/api/storage/status` must report `state: "ready"`, and an ingestion/restart test must confirm durable rows.
 - No verified canonical fixtures or settled results are currently stored. Provider observations and reconciliation groups are not verified evidence.
-- The original 80 names still need reviewed provider-ID and competition mappings. A name list is not verified match history.
+- The original 80 names and any added teams still need reviewed provider-ID and competition mappings. A name list is not verified match history.
+- Live runtime verification of PostgreSQL persistence, reviewed mappings and replay is still required; code/CI success is not proof that a deployed database is configured.
 - Historical result backfill, immutable prediction ledger, chronological backtesting, calibration, odds ingestion, TheRundown integration, authentication and production deployment are not complete.
 - Betting recommendations remain disabled. The Poisson baseline is exploratory and not a calibrated betting model.
 
