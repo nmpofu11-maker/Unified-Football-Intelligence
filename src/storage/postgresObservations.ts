@@ -423,6 +423,7 @@ export interface CanonicalEvidenceSummary {
   corroboratedFixtureCount?: number;
   verifiedSettledResultCount?: number;
   conflictedFixtureCount?: number;
+  staleLiveFixtureCount?: number;
   fixtures?: Array<{
     id: string; kickoffUtc: string; home: string; away: string; competition: string;
     status: string; providers: string[]; evidenceState: string;
@@ -440,7 +441,7 @@ export async function getCanonicalEvidenceSummary(): Promise<CanonicalEvidenceSu
     client = await configuredPool.connect();
     await ensureSchema(client);
     const counts = await client.query<{
-      fixtures: number; verified_results: number; conflicted_fixtures: number;
+      fixtures: number; verified_results: number; conflicted_fixtures: number; stale_live_fixtures: number;
     }>(`
       SELECT
         (SELECT COUNT(*)::integer FROM canonical_fixture_evidence
@@ -448,9 +449,10 @@ export async function getCanonicalEvidenceSummary(): Promise<CanonicalEvidenceSu
             AND NOT (status = 'live' AND kickoff_utc < NOW() - INTERVAL '6 hours')) AS fixtures,
         (SELECT COUNT(*)::integer FROM verified_settled_results WHERE evidence_state = 'verified') AS verified_results,
         (SELECT COUNT(*)::integer FROM canonical_fixture_evidence
-          WHERE evidence_state = 'conflicted'
-             OR (evidence_state = 'corroborated' AND status = 'live'
-                 AND kickoff_utc < NOW() - INTERVAL '6 hours')) AS conflicted_fixtures
+          WHERE evidence_state = 'conflicted') AS conflicted_fixtures,
+        (SELECT COUNT(*)::integer FROM canonical_fixture_evidence
+          WHERE evidence_state = 'corroborated' AND status = 'live'
+            AND kickoff_utc < NOW() - INTERVAL '6 hours') AS stale_live_fixtures
     `);
     const rows = await client.query<{
       canonical_key: string; kickoff_utc: Date; home_name: string; away_name: string;
@@ -473,6 +475,7 @@ export async function getCanonicalEvidenceSummary(): Promise<CanonicalEvidenceSu
       corroboratedFixtureCount: c?.fixtures ?? 0,
       verifiedSettledResultCount: c?.verified_results ?? 0,
       conflictedFixtureCount: c?.conflicted_fixtures ?? 0,
+      staleLiveFixtureCount: c?.stale_live_fixtures ?? 0,
       fixtures: rows.rows.map(row => ({
         id: row.canonical_key, kickoffUtc: row.kickoff_utc.toISOString(),
         home: row.home_name, away: row.away_name, competition: row.competition_name,
