@@ -8,7 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getTeamRegistrySummary, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations, saveProviderTeamMapping, syncTrackedTeamRegistry } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getTeamRegistrySummary, getTrackedTeamRegistry, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations, saveProviderTeamMapping, syncTrackedTeamRegistry } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -173,9 +173,9 @@ app.post("/api/history/replay", async (req: Request, res: Response) => {
 
 app.get("/api/teams/registry", async (_req: Request, res: Response) => {
   const seeded = await syncTrackedTeamRegistry(teamSeed.teams);
-  const summary = seeded.state === "ready" ? seeded : await getTeamRegistrySummary();
-  return res.status(summary.state === "error" ? 503 : 200).json({
-    ...summary,
+  const registry = seeded.state === "ready" ? await getTrackedTeamRegistry() : await getTrackedTeamRegistry();
+  return res.status(registry.state === "error" ? 503 : 200).json({
+    ...registry,
     note: "Only explicitly reviewed provider IDs count as mappings. Seeded names and unreviewed aliases are not proof of identity."
   });
 });
