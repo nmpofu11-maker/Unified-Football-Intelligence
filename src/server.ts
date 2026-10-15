@@ -8,7 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getTeamRegistrySummary, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations, saveProviderTeamMapping, syncTrackedTeamRegistry } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -169,6 +169,44 @@ app.post("/api/history/replay", async (req: Request, res: Response) => {
 });
 
 
+app.get("/api/teams/registry", async (_req: Request, res: Response) => {
+  const seeded = await syncTrackedTeamRegistry(teamSeed.teams);
+  const summary = seeded.state === "ready" ? seeded : await getTeamRegistrySummary();
+  return res.status(summary.state === "error" ? 503 : 200).json({
+    ...summary,
+    note: "Only explicitly reviewed provider IDs count as mappings. Seeded names and unreviewed aliases are not proof of identity."
+  });
+});
+
+app.post("/api/teams/mappings", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+  const body = req.body as Record<string, unknown>;
+  if (!body || typeof body !== "object" ||
+      typeof body.teamId !== "string" || typeof body.provider !== "string" ||
+      typeof body.providerTeamId !== "string" || typeof body.providerTeamName !== "string" ||
+      (body.confirmAlias !== undefined && typeof body.confirmAlias !== "boolean")) {
+    return res.status(400).json({ state: "invalid", errorCode: "invalid_mapping_request" });
+  }
+  const seeded = await syncTrackedTeamRegistry(teamSeed.teams);
+  if (seeded.state !== "ready") {
+    return res.status(503).json({ state: seeded.state, errorCode: seeded.errorCode ?? "team_registry_unavailable" });
+  }
+  const result = await saveProviderTeamMapping({
+    teamId: body.teamId, provider: body.provider, providerTeamId: body.providerTeamId,
+    providerTeamName: body.providerTeamName, confirmAlias: body.confirmAlias === true
+  });
+  const status = result.state === "saved" ? 200 :
+    result.state === "invalid" ? 400 : result.state === "conflict" ? 409 : 503;
+  return res.status(status).json(result);
+});
+
 app.get("/api/teams/watchlist", (_req: Request, res: Response) => res.json({
   source: teamSeed.source,
   count: teamSeed.count,
@@ -196,17 +234,26 @@ app.get("/api/fixtures", async (_req: Request, res: Response) => {
 });
 
 app.get("/api/history/status", async (_req: Request, res: Response) => {
-  const evidence = await getCanonicalEvidenceSummary();
-  return res.status(evidence.state === "error" ? 503 : 200).json({
+  const [evidence, seededRegistry] = await Promise.all([
+    getCanonicalEvidenceSummary(), syncTrackedTeamRegistry(teamSeed.teams)
+  ]);
+  const registry = seededRegistry.state === "ready" ? seededRegistry : await getTeamRegistrySummary();
+  const reasons = [
+    ...(evidence.state === "ready" ? [] : [evidence.errorCode ?? "canonical_evidence_store_not_ready"]),
+    ...(registry.state === "ready" ? [] : [registry.errorCode ?? "team_registry_store_not_ready"])
+  ];
+  return res.status(evidence.state === "error" || registry.state === "error" ? 503 : 200).json({
     state: evidence.state === "ready" ? "canonical_evidence" : evidence.state,
     seededTeamNames: teamSeed.count,
-    canonicalTeamMappings: 0,
-    teamMappingState: "not_implemented",
+    canonicalTeamMappings: registry.providerMappings,
+    mappedTeams: registry.mappedTeams,
+    unresolvedTeams: registry.unresolvedTeams,
+    teamMappingState: registry.state === "ready" ? (registry.providerMappings ? "partially_mapped" : "awaiting_review") : registry.state,
     canonicalFixtures: evidence.corroboratedFixtureCount ?? 0,
     verifiedSettledResults: evidence.verifiedSettledResultCount ?? 0,
     conflictedFixtures: evidence.conflictedFixtureCount ?? 0,
     staleLiveFixtures: evidence.staleLiveFixtureCount ?? 0,
-    reasons: evidence.state === "ready" ? [] : [evidence.errorCode ?? "canonical_evidence_store_not_ready"]
+    reasons
   });
 });
 
