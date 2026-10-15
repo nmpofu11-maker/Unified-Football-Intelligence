@@ -53,7 +53,29 @@ function canonicalName(value: string, aliases: Record<string, string>): string {
   return aliases[normalized] ?? normalized;
 }
 
-function baseKey(f: ProviderFixtureCandidate): string {
+export type ReviewedProviderTeamIdentityMap = Record<string, string>;
+
+function baseKey(
+  f: ProviderFixtureCandidate,
+  reviewedTeamIds: ReviewedProviderTeamIdentityMap
+): string | undefined {
+  const homeProviderId = f.home.providerTeamId?.trim();
+  const awayProviderId = f.away.providerTeamId?.trim();
+  // Once a provider supplies IDs, names must not silently substitute for an
+  // unreviewed identity. Both sides must have explicit reviewed mappings.
+  if (homeProviderId || awayProviderId) {
+    if (!homeProviderId || !awayProviderId) return undefined;
+    const homeId = reviewedTeamIds[`${f.provider}:${homeProviderId}`];
+    const awayId = reviewedTeamIds[`${f.provider}:${awayProviderId}`];
+    if (!homeId || !awayId || homeId === awayId) return undefined;
+    return [
+      `team-id:${homeId}`,
+      `team-id:${awayId}`,
+      canonicalName(f.competition.name, COMPETITION_ALIASES)
+    ].join("|");
+  }
+  // Legacy feeds that genuinely provide no team IDs can still use exact,
+  // curated name normalization; this is never used to override a supplied ID.
   return [
     canonicalName(f.home.name, TEAM_ALIASES),
     canonicalName(f.away.name, TEAM_ALIASES),
@@ -62,21 +84,24 @@ function baseKey(f: ProviderFixtureCandidate): string {
 }
 
 /**
- * Conservative cross-provider corroboration preview. This intentionally does not
- * create canonical fixtures, resolve team/competition IDs, or verify result evidence.
- * Curated exact aliases bridge known naming variants; kickoff times must still be within five minutes.
+ * Conservative cross-provider corroboration preview. Reviewed provider IDs take
+ * precedence over names; any candidate with supplied but unreviewed/incomplete IDs
+ * is excluded from matching. Raw observations remain stored separately.
+ * Candidates without IDs may use curated exact aliases; kickoff tolerance is five minutes.
  */
 export function previewCandidateReconciliation(
   candidates: ProviderFixtureCandidate[],
   kickoffToleranceMs = 5 * 60_000,
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  reviewedTeamIds: ReviewedProviderTeamIdentityMap = {}
 ): CandidateMatchPreview[] {
   const buckets = new Map<string, ProviderFixtureCandidate[]>();
   for (const candidate of candidates) {
     const kickoff = Date.parse(candidate.kickoffUtc);
     if (!Number.isFinite(kickoff) || !candidate.home.name.trim() ||
         !candidate.away.name.trim() || !candidate.competition.name.trim()) continue;
-    const key = baseKey(candidate);
+    const key = baseKey(candidate, reviewedTeamIds);
+    if (!key) continue;
     const bucket = buckets.get(key) ?? [];
     bucket.push(candidate);
     buckets.set(key, bucket);
