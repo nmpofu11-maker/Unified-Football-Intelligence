@@ -163,6 +163,7 @@ app.post("/api/history/replay", async (req: Request, res: Response) => {
     state: result.state,
     latestObservationsLoaded: result.latestObservationsLoaded,
     canonicalEvidence: result.canonicalEvidence,
+    ...(result.reconciliationDiagnostics ? { reconciliationDiagnostics: result.reconciliationDiagnostics } : {}),
     ...(result.errorCode ? { errorCode: result.errorCode } : {})
   });
 });
