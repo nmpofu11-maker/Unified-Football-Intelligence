@@ -233,6 +233,105 @@ export async function getObservationStoreStatus(): Promise<ObservationStoreStatu
   }
 }
 
+/** Loads only explicitly reviewed provider IDs; missing mappings never fall back to names when IDs were supplied. */
+export async function getReviewedProviderTeamIdentityMap(): Promise<Record<string, string>> {
+  const configuredPool = getPool();
+  if (!configuredPool) return {};
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{ provider: string; provider_team_id: string; team_id: string }>(
+      "SELECT provider, provider_team_id, team_id FROM provider_team_mappings"
+    );
+    const identities: Record<string, string> = {};
+    for (const row of result.rows) {
+      identities[`${row.provider}:${row.provider_team_id}`] = row.team_id;
+    }
+    return identities;
+  } catch {
+    // Fail closed: no provider IDs are considered reviewed if the mapping store cannot be read.
+    return {};
+  } finally {
+    client?.release();
+  }
+}
+
+export interface ObservedProviderTeamCandidate {
+  provider: string;
+  providerTeamId: string;
+  providerTeamName: string;
+  observedFixtureCount: number;
+  lastObservedAt: string;
+  mappingState: "unmapped" | "mapped";
+  canonicalTeamId?: string;
+  canonicalTeamName?: string;
+}
+
+/** Lists provider team identities from the latest raw observations without guessing canonical matches. */
+export async function getObservedProviderTeamCandidates(): Promise<{
+  state: "ready" | "not_configured" | "error";
+  count: number;
+  candidates: ObservedProviderTeamCandidate[];
+  errorCode?: string;
+}> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", count: 0, candidates: [] };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{
+      provider: string; provider_team_id: string; provider_team_name: string;
+      observed_fixture_count: number; last_observed_at: string;
+      canonical_team_id: string | null; canonical_team_name: string | null;
+    }>(`
+      WITH latest AS (
+        SELECT DISTINCT ON (provider, provider_fixture_id)
+          provider, provider_fixture_id, observed_at, observation
+        FROM provider_fixture_observations
+        ORDER BY provider, provider_fixture_id, observed_at DESC, id DESC
+      ), team_occurrences AS (
+        SELECT provider, provider_fixture_id, observed_at,
+          NULLIF(observation->'home'->>'providerTeamId', '') AS provider_team_id,
+          observation->'home'->>'name' AS provider_team_name
+        FROM latest
+        UNION ALL
+        SELECT provider, provider_fixture_id, observed_at,
+          NULLIF(observation->'away'->>'providerTeamId', '') AS provider_team_id,
+          observation->'away'->>'name' AS provider_team_name
+        FROM latest
+      )
+      SELECT o.provider, o.provider_team_id, MIN(o.provider_team_name) AS provider_team_name,
+        COUNT(DISTINCT o.provider_fixture_id)::integer AS observed_fixture_count,
+        MAX(o.observed_at)::text AS last_observed_at,
+        m.team_id AS canonical_team_id, t.canonical_name AS canonical_team_name
+      FROM team_occurrences o
+      LEFT JOIN provider_team_mappings m
+        ON m.provider = o.provider AND m.provider_team_id = o.provider_team_id
+      LEFT JOIN canonical_team_registry t ON t.team_id = m.team_id
+      WHERE o.provider_team_id IS NOT NULL AND COALESCE(o.provider_team_name, '') <> ''
+      GROUP BY o.provider, o.provider_team_id, m.team_id, t.canonical_name
+      ORDER BY (m.team_id IS NOT NULL), o.provider, MIN(o.provider_team_name)
+    `);
+    const candidates = result.rows.map(row => ({
+      provider: row.provider,
+      providerTeamId: row.provider_team_id,
+      providerTeamName: row.provider_team_name,
+      observedFixtureCount: row.observed_fixture_count,
+      lastObservedAt: row.last_observed_at,
+      mappingState: row.canonical_team_id ? "mapped" as const : "unmapped" as const,
+      ...(row.canonical_team_id ? { canonicalTeamId: row.canonical_team_id } : {}),
+      ...(row.canonical_team_name ? { canonicalTeamName: row.canonical_team_name } : {})
+    }));
+    return { state: "ready", count: candidates.length, candidates };
+  } catch (error) {
+    return { state: "error", count: 0, candidates: [], errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
 export interface CanonicalEvidencePersistenceResult {
   state: "saved" | "connected_empty" | "not_configured" | "error";
   corroboratedFixtures: number;
@@ -254,7 +353,8 @@ export async function persistCanonicalEvidence(
   if (!configuredPool) {
     return { state: "not_configured", corroboratedFixtures: 0, verifiedResults: 0, conflictedGroups: 0 };
   }
-  const previews = previewCandidateReconciliation(candidates);
+  const reviewedTeamIds = await getReviewedProviderTeamIdentityMap();
+  const previews = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
   const corroborated = previews.filter(p => p.state === "corroborated" && p.providers.length >= 2);
   const conflicted = previews.filter(p => p.state === "conflicted");
   const eligibleResults = corroborated.filter(p =>
@@ -446,7 +546,8 @@ export async function replayStoredProviderObservations(): Promise<StoredObservat
 
   // Return safe aggregate diagnostics so the operator can identify why stored
   // provider observations fail to reconcile, without exposing raw payloads or secrets.
-  const previews = previewCandidateReconciliation(candidates);
+  const reviewedTeamIds = await getReviewedProviderTeamIdentityMap();
+  const previews = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
   const conflictReasonCounts: Record<string, number> = {};
   for (const preview of previews.filter(item => item.state === "conflicted")) {
     for (const reason of preview.reasons) {
@@ -826,6 +927,55 @@ export async function saveProviderTeamMapping(input: ProviderTeamMappingInput): 
     );
     await client.query("COMMIT");
     return { state: "saved", teamId };
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => undefined);
+    return { state: "error", errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
+
+export interface CreateCanonicalTeamInput {
+  id: string;
+  canonicalName: string;
+}
+
+/** Creates a canonical team explicitly; does not attach any provider identity. */
+export async function createCanonicalTeam(input: CreateCanonicalTeamInput): Promise<
+  { state: "saved" | "conflict" | "invalid" | "not_configured" | "error"; team?: { id: string; canonicalName: string }; errorCode?: string }
+> {
+  const id = input.id.trim().toLowerCase();
+  const canonicalName = input.canonicalName.trim().replace(/\s+/g, " ");
+  if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(id) || !canonicalName || canonicalName.length > 200) {
+    return { state: "invalid", errorCode: "invalid_canonical_team_fields" };
+  }
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", errorCode: "database_not_configured" };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    await client.query("BEGIN");
+    const existing = await client.query<{ team_id: string; canonical_name: string }>(
+      "SELECT team_id, canonical_name FROM canonical_team_registry WHERE team_id = $1 OR LOWER(canonical_name) = LOWER($2) FOR UPDATE",
+      [id, canonicalName]
+    );
+    if (existing.rows.length) {
+      const match = existing.rows.find(row => normalizeTeamLabel(row.canonical_name) === normalizeTeamLabel(canonicalName));
+      if (match) {
+        await client.query("COMMIT");
+        return { state: "saved", team: { id: match.team_id, canonicalName: match.canonical_name } };
+      }
+      await client.query("ROLLBACK");
+      return { state: "conflict", errorCode: "canonical_team_id_already_used" };
+    }
+    await client.query(
+      "INSERT INTO canonical_team_registry (team_id, canonical_name, aliases) VALUES ($1, $2, '{}')",
+      [id, canonicalName]
+    );
+    await client.query("COMMIT");
+    return { state: "saved", team: { id, canonicalName } };
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => undefined);
     return { state: "error", errorCode: safeErrorCode(error) };

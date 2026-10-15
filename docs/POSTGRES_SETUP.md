@@ -1,6 +1,6 @@
 # PostgreSQL setup and persistence verification
 
-This app stores **raw, unverified provider observations only**. Connecting a database does not create canonical fixtures, verify scores, load the 80 teams' histories, calibrate forecasts, or enable betting recommendations.
+This app stores **raw, unverified provider observations** and a separate canonical-evidence ledger. Connecting a database does not by itself verify results, load the 80 teams' histories, calibrate forecasts, or enable betting recommendations.
 
 ## 1. Create a PostgreSQL database
 
@@ -63,6 +63,7 @@ If no records were returned by a provider, a `connected_empty` result can still 
 
 - PostgreSQL stores provider observations with provider IDs, observed time, provenance and raw normalized payload.
 - Observations retain `evidenceState: "unverified"`. The database write path rejects candidates with any other evidence state.
-- Canonical fixture creation remains disabled; the reconciliation output is only a preview.
-- Team/provider/competition identity mappings and settled-result verification remain outstanding.
+- Canonical evidence is written only after raw observation persistence succeeds and at least two providers corroborate the same fixture identity. A settled score is promoted only when independent providers agree on finished status and the exact score.
+- Provider team IDs must have explicit reviewed mappings when supplied; unknown IDs fail closed rather than falling back to names. The operator must review the mapping registry and replay stored observations.
+- This evidence pipeline does not load historical results by itself, establish forecast calibration, or enable betting recommendations.
 - Verified history, calibrated forecasts, and betting recommendations remain disabled until their separate evidence and validation gates pass.

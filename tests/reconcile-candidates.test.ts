@@ -8,8 +8,8 @@ function candidate(overrides: Partial<ProviderFixtureCandidate> = {}): ProviderF
     provider: "sportapi-ai",
     providerFixtureId: "one",
     kickoffUtc: "2026-10-13T18:00:00.000Z",
-    home: { name: "Bristol City", providerTeamId: "10" },
-    away: { name: "Blackburn Rovers", providerTeamId: "20" },
+    home: { name: "Bristol City" },
+    away: { name: "Blackburn Rovers" },
     competition: { name: "Championship", providerCompetitionId: "53" },
     status: "scheduled",
     observedAt: "2026-10-13T16:00:00.000Z",
@@ -75,4 +75,67 @@ test("stale live status is reported separately and does not masquerade as a prov
   assert.ok(result[0]?.reasons.includes("only_one_provider_observation"));
   assert.ok(result[0]?.reasons.includes("stale_live_status"));
   assert.ok(!result[0]?.reasons.includes("provider_status_disagreement"));
+});
+
+
+test("reviewed provider team IDs corroborate fixtures despite provider name variants", () => {
+  const first = candidate({
+    home: { name: "Bristol City", providerTeamId: "10" },
+    away: { name: "Blackburn Rovers", providerTeamId: "20" }
+  });
+  const second = candidate({
+    provider: "api-football",
+    providerFixtureId: "two",
+    home: { name: "Bristol C.", providerTeamId: "501" },
+    away: { name: "Blackburn", providerTeamId: "502" },
+    kickoffUtc: "2026-10-13T18:03:00.000Z"
+  });
+  const reviewedIds = {
+    "sportapi-ai:10": "legacy-team-1",
+    "sportapi-ai:20": "legacy-team-2",
+    "api-football:501": "legacy-team-1",
+    "api-football:502": "legacy-team-2"
+  };
+  const result = previewCandidateReconciliation([first, second], 5 * 60_000, Date.parse("2026-10-13T18:04:00Z"), reviewedIds);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.state, "corroborated");
+  assert.deepEqual(result[0]?.providers, ["api-football", "sportapi-ai"]);
+});
+
+test("provider candidates with supplied but unreviewed team IDs are excluded from canonical matching", () => {
+  const first = candidate({
+    home: { name: "Bristol City", providerTeamId: "unreviewed-home" },
+    away: { name: "Blackburn Rovers", providerTeamId: "unreviewed-away" }
+  });
+  const second = candidate({
+    provider: "api-football",
+    providerFixtureId: "two",
+    home: { name: "Bristol City", providerTeamId: "unknown-home" },
+    away: { name: "Blackburn Rovers", providerTeamId: "unknown-away" }
+  });
+  const result = previewCandidateReconciliation([first, second], 5 * 60_000, Date.now(), {});
+  assert.equal(result.length, 0);
+});
+
+test("reviewed identity prevents same-name fixtures with different provider IDs from being merged", () => {
+  const first = candidate({
+    home: { name: "Bristol City", providerTeamId: "10" },
+    away: { name: "Blackburn Rovers", providerTeamId: "20" }
+  });
+  const second = candidate({
+    provider: "api-football",
+    providerFixtureId: "two",
+    home: { name: "Bristol City", providerTeamId: "501" },
+    away: { name: "Blackburn Rovers", providerTeamId: "502" },
+    kickoffUtc: "2026-10-13T18:01:00.000Z"
+  });
+  const reviewedIds = {
+    "sportapi-ai:10": "team-home-a",
+    "sportapi-ai:20": "team-away-a",
+    "api-football:501": "team-home-b",
+    "api-football:502": "team-away-b"
+  };
+  const result = previewCandidateReconciliation([first, second], 5 * 60_000, Date.now(), reviewedIds);
+  assert.equal(result.length, 2);
+  assert.ok(result.every(item => item.state === "single_source"));
 });
