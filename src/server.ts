@@ -110,7 +110,18 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
   const providers = providerStatus();
   const candidates = [...sportApiAi, ...sportmonks, ...apiFootball];
   const persistence = await persistProviderObservations(candidates);
-  const canonicalEvidence = await persistCanonicalEvidence(candidates);
+  // Never promote a live response into canonical evidence unless the raw observation
+  // write completed successfully. This preserves the append-only provenance trail
+  // and prevents a partial/failed observation write from bypassing the evidence gate.
+  const canonicalEvidence = persistence.state === "saved" || persistence.state === "connected_empty"
+    ? await persistCanonicalEvidence(candidates)
+    : {
+        state: persistence.state === "not_configured" ? "not_configured" as const : "error" as const,
+        corroboratedFixtures: 0,
+        verifiedResults: 0,
+        conflictedGroups: 0,
+        errorCode: persistence.errorCode ?? "raw_observation_persistence_required"
+      };
   const reviewedTeamIds = await getReviewedProviderTeamIdentityMap();
   const reconciliationPreview = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
   const byStatus: Record<string, number> = {};
