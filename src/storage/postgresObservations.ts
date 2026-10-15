@@ -482,7 +482,9 @@ export async function persistCanonicalEvidence(
       state: corroborated.length + conflicted.length === 0 ? "connected_empty" : "saved",
       corroboratedFixtures: corroborated.length,
       verifiedResults: eligibleResults.length,
-      conflictedGroups: conflicted.length
+      conflictedGroups: conflicted.length,
+      ...(options.replaceSnapshot && candidates.length > 0 && !snapshotIdentityComplete
+        ? { snapshotReplacementSkipped: true } : {})
     };
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => undefined);
