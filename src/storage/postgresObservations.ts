@@ -709,8 +709,16 @@ export async function getTrackedTeamRegistry(): Promise<TeamRegistryResult> {
       }
     }
     const teams = [...byId.values()];
-    const summary = await getTeamRegistrySummary();
-    return { ...summary, teams };
+    const mappedTeams = teams.filter(team => team.mappingState === "mapped").length;
+    const providerMappings = teams.reduce((count, team) => count + Object.keys(team.providerIds).length, 0);
+    return {
+      state: "ready",
+      seededTeams: teams.length,
+      mappedTeams,
+      unresolvedTeams: teams.length - mappedTeams,
+      providerMappings,
+      teams
+    };
   } catch (error) {
     return { state: "error", seededTeams: 0, mappedTeams: 0, unresolvedTeams: 0, providerMappings: 0, teams: [], errorCode: safeErrorCode(error) };
   } finally {
