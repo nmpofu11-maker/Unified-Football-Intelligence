@@ -114,10 +114,13 @@ export function previewCandidateReconciliation(
       if (staleLiveObservation) reasons.push("stale_live_status");
       if (scores.length > 1) reasons.push("provider_score_disagreement");
       if (group.some(item => item.status === "finished" && !item.score)) reasons.push("finished_observation_missing_score");
+      // A stale live label is a freshness/availability problem, not evidence that
+      // providers disagree. Keep it visible in reasons, but do not inflate the
+      // conflict count or let that label alone classify a fixture as conflicted.
+      // Stale live fixtures are separately filtered from the canonical read model.
       const state: CandidateMatchState = reasons.some(reason =>
         reason === "provider_status_disagreement" ||
-        reason === "provider_score_disagreement" ||
-        reason === "stale_live_status"
+        reason === "provider_score_disagreement"
       ) ? "conflicted" : providers.length >= 2 ? "corroborated" : "single_source";
       const representative = group[0]!;
       previews.push({
