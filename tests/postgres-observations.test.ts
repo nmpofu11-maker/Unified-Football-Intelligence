@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getObservationStoreStatus, persistProviderObservations } from "../src/storage/postgresObservations.js";
+import { getObservationStoreStatus, hasCompleteReviewedProviderTeamIdentityCoverage, persistProviderObservations } from "../src/storage/postgresObservations.js";
 import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
 
 function candidate(evidenceState: ProviderFixtureCandidate["evidenceState"] = "unverified"): ProviderFixtureCandidate {
@@ -47,4 +47,28 @@ test("observation storage refuses to persist a candidate already marked verified
     if (previous === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previous;
   }
+});
+
+test("snapshot replacement requires complete, distinct reviewed identities for supplied provider IDs", () => {
+  const withIds: ProviderFixtureCandidate = {
+    ...candidate(),
+    home: { name: "Home FC", providerTeamId: "home-1" },
+    away: { name: "Away FC", providerTeamId: "away-1" }
+  };
+  assert.equal(hasCompleteReviewedProviderTeamIdentityCoverage([withIds], {}), false);
+  assert.equal(hasCompleteReviewedProviderTeamIdentityCoverage([withIds], {
+    "sportapi-ai:home-1": "canonical-home"
+  }), false);
+  assert.equal(hasCompleteReviewedProviderTeamIdentityCoverage([withIds], {
+    "sportapi-ai:home-1": "canonical-home",
+    "sportapi-ai:away-1": "canonical-home"
+  }), false);
+  assert.equal(hasCompleteReviewedProviderTeamIdentityCoverage([withIds], {
+    "sportapi-ai:home-1": "canonical-home",
+    "sportapi-ai:away-1": "canonical-away"
+  }), true);
+});
+
+test("snapshot identity coverage remains compatible with observations that have no provider team IDs", () => {
+  assert.equal(hasCompleteReviewedProviderTeamIdentityCoverage([candidate()], {}), true);
 });
