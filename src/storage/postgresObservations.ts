@@ -348,6 +348,18 @@ export interface StoredObservationReplayResult {
   state: "saved" | "connected_empty" | "not_configured" | "error";
   latestObservationsLoaded: number;
   canonicalEvidence: CanonicalEvidencePersistenceResult;
+  reconciliationDiagnostics?: {
+    groups: number;
+    singleSourceGroups: number;
+    corroboratedGroups: number;
+    conflictedGroups: number;
+    conflictReasonCounts: Record<string, number>;
+    conflictSamples: Array<{
+      home: string; away: string; competition: string; kickoffUtc: string;
+      providers: string[]; statuses: string[]; scores: Array<{ home: number; away: number }>;
+      reasons: string[];
+    }>;
+  };
   errorCode?: string;
 }
 
@@ -408,11 +420,32 @@ export async function replayStoredProviderObservations(): Promise<StoredObservat
     client?.release();
   }
 
+  // Return safe aggregate diagnostics so the operator can identify why stored
+  // provider observations fail to reconcile, without exposing raw payloads or secrets.
+  const previews = previewCandidateReconciliation(candidates);
+  const conflictReasonCounts: Record<string, number> = {};
+  for (const preview of previews.filter(item => item.state === "conflicted")) {
+    for (const reason of preview.reasons) {
+      conflictReasonCounts[reason] = (conflictReasonCounts[reason] ?? 0) + 1;
+    }
+  }
+  const reconciliationDiagnostics = {
+    groups: previews.length,
+    singleSourceGroups: previews.filter(item => item.state === "single_source").length,
+    corroboratedGroups: previews.filter(item => item.state === "corroborated").length,
+    conflictedGroups: previews.filter(item => item.state === "conflicted").length,
+    conflictReasonCounts,
+    conflictSamples: previews.filter(item => item.state === "conflicted").slice(0, 10).map(item => ({
+      home: item.home, away: item.away, competition: item.competition, kickoffUtc: item.kickoffUtc,
+      providers: item.providers, statuses: item.statuses, scores: item.scores, reasons: item.reasons
+    }))
+  };
   const canonicalEvidence = await persistCanonicalEvidence(candidates, { replaceSnapshot: true });
   return {
     state: canonicalEvidence.state,
     latestObservationsLoaded: candidates.length,
     canonicalEvidence,
+    reconciliationDiagnostics,
     ...(canonicalEvidence.errorCode ? { errorCode: canonicalEvidence.errorCode } : {})
   };
 }
