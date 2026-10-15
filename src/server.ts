@@ -200,9 +200,11 @@ app.get("/api/history/status", async (_req: Request, res: Response) => {
     state: evidence.state === "ready" ? "canonical_evidence" : evidence.state,
     seededTeamNames: teamSeed.count,
     canonicalTeamMappings: 0,
+    teamMappingState: "not_implemented",
     canonicalFixtures: evidence.corroboratedFixtureCount ?? 0,
     verifiedSettledResults: evidence.verifiedSettledResultCount ?? 0,
     conflictedFixtures: evidence.conflictedFixtureCount ?? 0,
+    staleLiveFixtures: evidence.staleLiveFixtureCount ?? 0,
     reasons: evidence.state === "ready" ? [] : [evidence.errorCode ?? "canonical_evidence_store_not_ready"]
   });
 });
