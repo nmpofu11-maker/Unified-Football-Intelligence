@@ -356,6 +356,8 @@ export interface CanonicalEvidencePersistenceResult {
   corroboratedFixtures: number;
   verifiedResults: number;
   conflictedGroups: number;
+  /** True when replay preserved the old snapshot because some supplied IDs are unreviewed. */
+  snapshotReplacementSkipped?: boolean;
   errorCode?: string;
 }
 
