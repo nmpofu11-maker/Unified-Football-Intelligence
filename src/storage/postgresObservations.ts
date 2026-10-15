@@ -335,6 +335,22 @@ export async function getObservedProviderTeamCandidates(): Promise<{
   }
 }
 
+/** True only when every supplied provider ID has an explicitly reviewed, distinct canonical identity. */
+export function hasCompleteReviewedProviderTeamIdentityCoverage(
+  candidates: ProviderFixtureCandidate[],
+  reviewedTeamIds: Record<string, string>
+): boolean {
+  return candidates.every(candidate => {
+    const homeProviderId = candidate.home.providerTeamId?.trim();
+    const awayProviderId = candidate.away.providerTeamId?.trim();
+    if (!homeProviderId && !awayProviderId) return true;
+    if (!homeProviderId || !awayProviderId) return false;
+    const homeTeamId = reviewedTeamIds[`${candidate.provider}:${homeProviderId}`];
+    const awayTeamId = reviewedTeamIds[`${candidate.provider}:${awayProviderId}`];
+    return Boolean(homeTeamId && awayTeamId && homeTeamId !== awayTeamId);
+  });
+}
+
 export interface CanonicalEvidencePersistenceResult {
   state: "saved" | "connected_empty" | "not_configured" | "error";
   corroboratedFixtures: number;
@@ -377,15 +393,7 @@ export async function persistCanonicalEvidence(
     // simply because currently-unmapped candidates are excluded from reconciliation.
     // Keep the existing snapshot until identity coverage is complete; upserts below
     // still allow newly reconciled evidence to be added safely.
-    const snapshotIdentityComplete = candidates.every(candidate => {
-      const homeProviderId = candidate.home.providerTeamId?.trim();
-      const awayProviderId = candidate.away.providerTeamId?.trim();
-      if (!homeProviderId && !awayProviderId) return true;
-      if (!homeProviderId || !awayProviderId) return false;
-      const homeTeamId = reviewedTeamIds[`${candidate.provider}:${homeProviderId}`];
-      const awayTeamId = reviewedTeamIds[`${candidate.provider}:${awayProviderId}`];
-      return Boolean(homeTeamId && awayTeamId && homeTeamId !== awayTeamId);
-    });
+    const snapshotIdentityComplete = hasCompleteReviewedProviderTeamIdentityCoverage(candidates, reviewedTeamIds);
     if (options.replaceSnapshot && candidates.length > 0 && snapshotIdentityComplete) {
       // Full identity coverage allows stale canonical keys (including old
       // competition-label variants) to be removed before rebuilding the snapshot.
