@@ -946,7 +946,7 @@ export async function createCanonicalTeam(input: CreateCanonicalTeamInput): Prom
   { state: "saved" | "conflict" | "invalid" | "not_configured" | "error"; team?: { id: string; canonicalName: string }; errorCode?: string }
 > {
   const id = input.id.trim().toLowerCase();
-  const canonicalName = input.canonicalName.trim().replace(/\\s+/g, " ");
+  const canonicalName = input.canonicalName.trim().replace(/\s+/g, " ");
   if (!/^[a-z0-9][a-z0-9-]{0,99}$/.test(id) || !canonicalName || canonicalName.length > 200) {
     return { state: "invalid", errorCode: "invalid_canonical_team_fields" };
   }
