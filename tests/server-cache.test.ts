@@ -29,7 +29,7 @@ async function waitForHealth(url: string, child: ChildProcess): Promise<void> {
   throw new Error("Test server did not become ready");
 }
 
-test("fixture endpoint distinguishes fresh provider checks from cache hits", { timeout: 15000 }, async () => {
+test("fixture endpoint does not cache checks when observation persistence is unavailable", { timeout: 15000 }, async () => {
   const port = await freePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const child = spawn(process.execPath, ["--import", "tsx", "src/server.ts"], {
@@ -62,9 +62,10 @@ test("fixture endpoint distinguishes fresh provider checks from cache hits", { t
     const secondResponse = await fetch(endpoint);
     const second = await secondResponse.json() as Record<string, unknown>;
     assert.equal(secondResponse.status, 200);
-    assert.equal(second.cache, "hit");
-    assert.equal(second.cached, true);
-    assert.equal(typeof second.cachedAt, "string");
+    assert.equal(second.cache, "miss");
+    assert.equal(second.cached, false);
+    assert.equal(typeof second.retrievedAt, "string");
+    assert.equal((second.persistence as Record<string, unknown>).state, "not_configured");
     assert.equal(second.candidateCount, 0);
   } finally {
     child.kill("SIGTERM");

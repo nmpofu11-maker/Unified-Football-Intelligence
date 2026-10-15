@@ -154,7 +154,7 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     providers
   };
   const retrievedAt = new Date().toISOString();
-  if (persistence.state !== "error") providerCache.set(date, { expiresAt: now + 5 * 60_000, retrievedAt, payload });
+  if (persistence.state === "saved" || persistence.state === "connected_empty") providerCache.set(date, { expiresAt: now + 5 * 60_000, retrievedAt, payload });
   if (providerCache.size > 100) {
     const oldestKey = providerCache.keys().next().value;
     if (oldestKey) providerCache.delete(oldestKey);
