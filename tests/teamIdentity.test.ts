@@ -67,3 +67,37 @@ test("normalizes accents and punctuation but does not strip team category suffix
   assert.equal(result[0]?.state, "resolved");
   assert.equal(result[1]?.state, "unresolved");
 });
+
+import { reconcileTeamSearchIdentity } from "../src/domain/teamIdentity.js";
+import type { TeamSearchProviderResult } from "../src/providers/teamSearch.js";
+
+test("confirms only unique exact cross-provider candidates with matching country", () => {
+  const results: TeamSearchProviderResult[] = [
+    { provider: "api-football", state: "success", candidates: [{ provider: "api-football", providerTeamId: "101", name: "Club Example", country: "Paraguay" }] },
+    { provider: "sportmonks", state: "success", candidates: [{ provider: "sportmonks", providerTeamId: "202", name: "Club Example", country: "Paraguay" }] }
+  ];
+  const resolution = reconcileTeamSearchIdentity({ id: "team-1", canonicalName: "Club Example" }, results);
+  assert.equal(resolution.state, "confirmed");
+  assert.deepEqual(resolution.identities.map(item => item.providerTeamId), ["101", "202"]);
+});
+
+test("keeps country conflicts ambiguous and missing country unresolved", () => {
+  const conflict: TeamSearchProviderResult[] = [
+    { provider: "api-football", state: "success", candidates: [{ provider: "api-football", providerTeamId: "101", name: "Club Example", country: "Paraguay" }] },
+    { provider: "sportmonks", state: "success", candidates: [{ provider: "sportmonks", providerTeamId: "202", name: "Club Example", country: "Uruguay" }] }
+  ];
+  assert.equal(reconcileTeamSearchIdentity({ id: "team-1", canonicalName: "Club Example" }, conflict).state, "ambiguous");
+  const missingCountry: TeamSearchProviderResult[] = [
+    conflict[0]!,
+    { provider: "sportmonks", state: "success", candidates: [{ provider: "sportmonks", providerTeamId: "202", name: "Club Example" }] }
+  ];
+  assert.equal(reconcileTeamSearchIdentity({ id: "team-1", canonicalName: "Club Example" }, missingCountry).state, "unresolved");
+});
+
+test("does not merge youth/reserve/women variants by stripping suffixes", () => {
+  const results: TeamSearchProviderResult[] = [
+    { provider: "api-football", state: "success", candidates: [{ provider: "api-football", providerTeamId: "101", name: "Benfica", country: "Portugal" }] },
+    { provider: "sportmonks", state: "success", candidates: [{ provider: "sportmonks", providerTeamId: "202", name: "Benfica", country: "Portugal" }] }
+  ];
+  assert.equal(reconcileTeamSearchIdentity({ id: "team-1", canonicalName: "Benfica U19" }, results).state, "unresolved");
+});

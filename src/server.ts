@@ -10,7 +10,7 @@ import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
 import { discoverTrackedTeamIdentities } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -223,14 +223,18 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
     providers: await searchTeamAcrossProviders(team.canonicalName)
   })));
   const persistence = await persistTeamSearchObservations(results);
+  const identityMapping = persistence.state === "saved"
+    ? await reconcileStoredTeamSearchCandidates(trackedTeams)
+    : { state: persistence.state === "error" ? "error" as const : "not_configured" as const, trackedTeams: trackedTeams.length, confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, skippedIncompleteSearch: trackedTeams.length, mappings: [] };
   return res.json({
     state: "provider_team_search_completed",
+    identityMapping,
     resultCount: results.length,
     batch: batchRaw ? Number(batchRaw) : null,
     nextBatch: batchRaw && Number(batchRaw) + 1 < Math.ceil(teamSeed.teams.length / 5) ? Number(batchRaw) + 1 : null,
     persistence,
     results,
-    note: "Provider search results are candidates only. They do not write or approve canonical mappings. Review name, country, gender/category and competition context before any identity is accepted. Search at most three favourite teams per request to protect provider quotas."
+    note: "Search results are stored as discovery observations. A mapping is confirmed only when one exact/curated-name candidate from each provider has matching country metadata. Ambiguous or incomplete cases remain unconfirmed. Search at most five favourite teams per request to protect provider quotas."
   });
 });
 app.get("/api/teams/provider-search/results", async (req: Request, res: Response) => {
@@ -251,12 +255,14 @@ app.get("/api/teams/provider-search/results", async (req: Request, res: Response
 
 
 app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
-  const [discovery, searchReview] = await Promise.all([
+  const [discovery, searchReview, identityMappings] = await Promise.all([
     getStoredTeamIdentityDiscovery(teamSeed.teams),
-    getStoredTeamSearchReview(teamSeed.teams)
+    getStoredTeamSearchReview(teamSeed.teams),
+    getStoredTeamIdentityMappings(teamSeed.teams)
   ]);
   const byId = new Map(discovery.teams.map(team => [team.trackedTeamId, team]));
   const searchesById = new Map(searchReview.teams.map(team => [team.trackedTeamId, team]));
+  const mappingsById = new Map(identityMappings.teams.map(team => [team.trackedTeamId, team]));
   return res.json({
     source: teamSeed.source,
     count: teamSeed.count,
@@ -273,10 +279,19 @@ app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
       candidateCount: searchReview.candidateCount,
       note: "Provider search candidates are suggestions only; they are not approved mappings."
     },
+    canonicalMappingSummary: {
+      state: identityMappings.state,
+      confirmed: identityMappings.confirmed,
+      ambiguous: identityMappings.ambiguous,
+      unresolved: identityMappings.unresolved,
+      ...(identityMappings.errorCode ? { errorCode: identityMappings.errorCode } : {}),
+      note: "A mapping is confirmed only when unique exact/curated-name candidates from both providers agree on country. This is identity evidence, not verified historical results."
+    },
     teams: teamSeed.teams.map(team => ({
       ...team,
       identityDiscovery: byId.get(team.id) ?? { trackedTeamId: team.id, canonicalName: team.canonicalName, state: "unresolved", identities: [], reasons: ["durable_identity_discovery_unavailable"] },
-      providerSearch: searchesById.get(team.id) ?? { trackedTeamId: team.id, canonicalName: team.canonicalName, state: "never_searched", providers: [] }
+      providerSearch: searchesById.get(team.id) ?? { trackedTeamId: team.id, canonicalName: team.canonicalName, state: "never_searched", providers: [] },
+      canonicalMapping: mappingsById.get(team.id) ?? { trackedTeamId: team.id, canonicalName: team.canonicalName, state: "unresolved", providers: [] }
     }))
   });
 });

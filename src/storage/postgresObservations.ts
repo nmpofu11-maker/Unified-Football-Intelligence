@@ -1,7 +1,7 @@
 import { Pool, type PoolClient } from "pg";
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
 import { previewCandidateReconciliation } from "../domain/reconcileCandidates.js";
-import { discoverTrackedTeamIdentities, type TrackedTeamIdentity, type TeamIdentityDiscovery } from "../domain/teamIdentity.js";
+import { discoverTrackedTeamIdentities, reconcileTeamSearchIdentity, type TrackedTeamIdentity, type TeamIdentityDiscovery, type TeamSearchIdentityResolution } from "../domain/teamIdentity.js";
 import type { TeamSearchProviderResult } from "../providers/teamSearch.js";
 
 export type ObservationPersistenceState = "saved" | "connected_empty" | "not_configured" | "error";
@@ -110,6 +110,21 @@ async function ensureSchema(client: PoolClient): Promise<void> {
   await client.query(`
     CREATE INDEX IF NOT EXISTS team_search_observations_latest_idx
     ON team_search_observations (tracked_team_id, provider, searched_at DESC)
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS team_identity_mappings (
+      tracked_team_id TEXT NOT NULL,
+      canonical_name TEXT NOT NULL,
+      provider TEXT NOT NULL CHECK (provider IN ('api-football','sportmonks')),
+      mapping_state TEXT NOT NULL CHECK (mapping_state IN ('confirmed','ambiguous','unresolved')),
+      provider_team_id TEXT,
+      provider_team_name TEXT,
+      country TEXT,
+      reasons TEXT[] NOT NULL DEFAULT '{}',
+      source_search_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (tracked_team_id, provider)
+    )
   `);
   await client.query(`
     CREATE TABLE IF NOT EXISTS canonical_fixture_evidence (
@@ -842,6 +857,184 @@ export async function getStoredTeamSearchReview(
     };
   } catch (error) {
     return { state: "error", trackedTeams: trackedTeams.length, searchedTeams: 0, candidateCount: 0, teams: [], errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
+export interface TeamIdentityMappingReconciliationSummary {
+  state: "saved" | "not_configured" | "error";
+  trackedTeams: number;
+  confirmed: number;
+  ambiguous: number;
+  unresolved: number;
+  skippedIncompleteSearch: number;
+  mappings: TeamSearchIdentityResolution[];
+  errorCode?: string;
+}
+
+/** Reconciles latest provider searches using exact/curated names plus matching country from both providers. */
+export async function reconcileStoredTeamSearchCandidates(
+  trackedTeams: TrackedTeamIdentity[]
+): Promise<TeamIdentityMappingReconciliationSummary> {
+  const configuredPool = getPool();
+  if (!configuredPool) {
+    return { state: "not_configured", trackedTeams: trackedTeams.length, confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, skippedIncompleteSearch: trackedTeams.length, mappings: [] };
+  }
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const latest = await client.query<{
+      tracked_team_id: string; provider: "api-football" | "sportmonks"; search_state: string;
+      provider_team_id: string | null; provider_team_name: string | null; country: string | null;
+      gender: string | null; team_type: string | null; short_code: string | null; error_code: string | null;
+      searched_at: Date;
+    }>(`
+      WITH latest AS (
+        SELECT tracked_team_id, provider, MAX(searched_at) AS searched_at
+        FROM team_search_observations
+        GROUP BY tracked_team_id, provider
+      )
+      SELECT s.tracked_team_id, s.provider, s.search_state, s.provider_team_id,
+             s.provider_team_name, s.country, s.gender, s.team_type, s.short_code,
+             s.error_code, s.searched_at
+      FROM team_search_observations s
+      JOIN latest l ON l.tracked_team_id = s.tracked_team_id
+                   AND l.provider = s.provider AND l.searched_at = s.searched_at
+      ORDER BY s.tracked_team_id, s.provider, s.provider_team_id NULLS FIRST
+    `);
+    const teamsById = new Map(trackedTeams.map(team => [team.id, team]));
+    const resultsByTeam = new Map<string, TeamSearchProviderResult[]>();
+    const timestampsByTeam = new Map<string, string>();
+    const failedTeams = new Set<string>();
+    for (const row of latest.rows) {
+      if (!teamsById.has(row.tracked_team_id)) continue;
+      let providerResults = resultsByTeam.get(row.tracked_team_id);
+      if (!providerResults) {
+        providerResults = [];
+        resultsByTeam.set(row.tracked_team_id, providerResults);
+      }
+      let providerResult = providerResults.find(item => item.provider === row.provider);
+      if (!providerResult) {
+        const state = ["success","success_empty","unavailable","rate_limited","auth_error","http_error","request_error","schema_error"].includes(row.search_state)
+          ? row.search_state as TeamSearchProviderResult["state"] : "schema_error";
+        providerResult = { provider: row.provider, state, candidates: [], ...(row.error_code ? { errorCode: row.error_code } : {}) };
+        providerResults.push(providerResult);
+      }
+      if (row.provider_team_id && row.provider_team_name) {
+        providerResult.candidates.push({
+          provider: row.provider,
+          providerTeamId: row.provider_team_id,
+          name: row.provider_team_name,
+          ...(row.country ? { country: row.country } : {}),
+          ...(row.gender ? { gender: row.gender } : {}),
+          ...(row.team_type ? { teamType: row.team_type } : {}),
+          ...(row.short_code ? { shortCode: row.short_code } : {})
+        });
+      }
+      timestampsByTeam.set(row.tracked_team_id, row.searched_at.toISOString());
+      if (!["success","success_empty"].includes(row.search_state)) failedTeams.add(row.tracked_team_id);
+    }
+    const mappings: TeamSearchIdentityResolution[] = [];
+    let skippedIncompleteSearch = 0;
+    await client.query("BEGIN");
+    for (const team of trackedTeams) {
+      const providerResults = resultsByTeam.get(team.id) ?? [];
+      const complete = providerResults.length === 2 && !failedTeams.has(team.id);
+      if (!complete) {
+        skippedIncompleteSearch++;
+        continue;
+      }
+      const resolution = reconcileTeamSearchIdentity(team, providerResults);
+      mappings.push(resolution);
+      const sourceSearchAt = timestampsByTeam.get(team.id) ?? null;
+      for (const provider of ["api-football", "sportmonks"] as const) {
+        const identity = resolution.identities.find(item => item.provider === provider);
+        await client.query(
+          `INSERT INTO team_identity_mappings
+            (tracked_team_id, canonical_name, provider, mapping_state, provider_team_id,
+             provider_team_name, country, reasons, source_search_at, updated_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+           ON CONFLICT (tracked_team_id, provider) DO UPDATE SET
+             canonical_name = EXCLUDED.canonical_name,
+             mapping_state = EXCLUDED.mapping_state,
+             provider_team_id = EXCLUDED.provider_team_id,
+             provider_team_name = EXCLUDED.provider_team_name,
+             country = EXCLUDED.country,
+             reasons = EXCLUDED.reasons,
+             source_search_at = EXCLUDED.source_search_at,
+             updated_at = NOW()`,
+          [team.id, team.canonicalName, provider, resolution.state,
+           identity?.providerTeamId ?? null, identity?.providerName ?? null, identity?.country ?? null,
+           resolution.reasons, sourceSearchAt]
+        );
+      }
+    }
+    await client.query("COMMIT");
+    return {
+      state: "saved", trackedTeams: trackedTeams.length,
+      confirmed: mappings.filter(item => item.state === "confirmed").length,
+      ambiguous: mappings.filter(item => item.state === "ambiguous").length,
+      unresolved: mappings.filter(item => item.state === "unresolved").length,
+      skippedIncompleteSearch, mappings
+    };
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => undefined);
+    return { state: "error", trackedTeams: trackedTeams.length, confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, skippedIncompleteSearch: trackedTeams.length, mappings: [], errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
+export interface StoredTeamIdentityMapping {
+  trackedTeamId: string;
+  canonicalName: string;
+  state: "confirmed" | "ambiguous" | "unresolved";
+  providers: Array<{ provider: "api-football" | "sportmonks"; providerTeamId?: string; providerTeamName?: string; country?: string; reasons: string[]; updatedAt: string }>;
+}
+export async function getStoredTeamIdentityMappings(
+  trackedTeams: TrackedTeamIdentity[]
+): Promise<{ state: "ready" | "not_configured" | "error"; confirmed: number; ambiguous: number; unresolved: number; teams: StoredTeamIdentityMapping[]; errorCode?: string }> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, teams: [] };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{
+      tracked_team_id: string; canonical_name: string; provider: "api-football" | "sportmonks";
+      mapping_state: "confirmed" | "ambiguous" | "unresolved"; provider_team_id: string | null;
+      provider_team_name: string | null; country: string | null; reasons: string[]; updated_at: Date;
+    }>(`SELECT tracked_team_id, canonical_name, provider, mapping_state, provider_team_id,
+               provider_team_name, country, reasons, updated_at
+        FROM team_identity_mappings ORDER BY tracked_team_id, provider`);
+    const mapped = new Map<string, StoredTeamIdentityMapping>();
+    for (const team of trackedTeams) mapped.set(team.id, {
+      trackedTeamId: team.id, canonicalName: team.canonicalName, state: "unresolved", providers: []
+    });
+    for (const row of result.rows) {
+      const team = mapped.get(row.tracked_team_id);
+      if (!team) continue;
+      team.providers.push({
+        provider: row.provider,
+        ...(row.provider_team_id ? { providerTeamId: row.provider_team_id } : {}),
+        ...(row.provider_team_name ? { providerTeamName: row.provider_team_name } : {}),
+        ...(row.country ? { country: row.country } : {}),
+        reasons: row.reasons, updatedAt: row.updated_at.toISOString()
+      });
+      team.state = row.mapping_state;
+    }
+    const teams = [...mapped.values()];
+    return {
+      state: "ready",
+      confirmed: teams.filter(team => team.state === "confirmed" && team.providers.length === 2).length,
+      ambiguous: teams.filter(team => team.state === "ambiguous").length,
+      unresolved: teams.filter(team => team.state === "unresolved").length,
+      teams
+    };
+  } catch (error) {
+    return { state: "error", confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, teams: [], errorCode: safeErrorCode(error) };
   } finally {
     client?.release();
   }
