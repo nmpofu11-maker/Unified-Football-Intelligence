@@ -179,23 +179,42 @@ export async function persistProviderObservations(
     // insert failure could roll back DDL after schemaReady has been set to true.
     await ensureSchema(client);
     await client.query("BEGIN");
-    for (const candidate of valid) {
+    if (valid.length > 0) {
+      // Insert the provider batch in one database round-trip. Provider responses can
+      // contain thousands of fixtures; one INSERT per candidate can keep the browser
+      // request open for minutes while holding a transaction and a pool connection.
+      const rows = valid.map(candidate => ({
+        provider: candidate.provider,
+        provider_fixture_id: candidate.providerFixtureId,
+        kickoff_utc: candidate.kickoffUtc,
+        home_name: candidate.home.name,
+        away_name: candidate.away.name,
+        competition_name: candidate.competition.name,
+        status: candidate.status,
+        score_home: candidate.score?.home ?? null,
+        score_away: candidate.score?.away ?? null,
+        observed_at: candidate.observedAt,
+        evidence_state: candidate.evidenceState,
+        provenance: candidate.provenance,
+        observation: candidate
+      }));
       const result = await client.query(
         `INSERT INTO provider_fixture_observations
           (provider, provider_fixture_id, kickoff_utc, home_name, away_name, competition_name,
            status, score_home, score_away, observed_at, evidence_state, provenance, observation)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13::jsonb)
+         SELECT provider, provider_fixture_id, kickoff_utc, home_name, away_name, competition_name,
+                status, score_home, score_away, observed_at, evidence_state, provenance, observation
+         FROM jsonb_to_recordset($1::jsonb) AS row_data(
+           provider text, provider_fixture_id text, kickoff_utc timestamptz,
+           home_name text, away_name text, competition_name text, status text,
+           score_home integer, score_away integer, observed_at timestamptz,
+           evidence_state text, provenance jsonb, observation jsonb
+         )
          ON CONFLICT (provider, provider_fixture_id, observed_at) DO NOTHING
          RETURNING id`,
-        [
-          candidate.provider, candidate.providerFixtureId, candidate.kickoffUtc,
-          candidate.home.name, candidate.away.name, candidate.competition.name,
-          candidate.status, candidate.score?.home ?? null, candidate.score?.away ?? null,
-          candidate.observedAt, candidate.evidenceState, JSON.stringify(candidate.provenance),
-          JSON.stringify(candidate)
-        ]
+        [JSON.stringify(rows)]
       );
-      inserted += result.rowCount ?? 0;
+      inserted = result.rowCount ?? 0;
     }
     await client.query("COMMIT");
     return {
