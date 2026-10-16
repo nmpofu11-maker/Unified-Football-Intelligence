@@ -451,21 +451,21 @@ document.getElementById('discover-teams').addEventListener('click',async()=>{
   for(let batch=1;batch<=32;batch++){
    if(batch>1)await sleep(31000);
    let response=await fetch('/api/teams/provider-search/next-batch',{method:'POST',headers:{'content-type':'application/json',...(token?{'x-provider-diagnostics-token':token}:{})},body:'{}'});
-   if(response.status===429&&rateRetries<3){rateRetries++;log.textContent+='\nRate limit reached; waiting 65 seconds before retry '+rateRetries+'/3.';await sleep(65000);batch--;continue}
+   if(response.status===429&&rateRetries<3){rateRetries++;log.textContent+='\\nRate limit reached; waiting 65 seconds before retry '+rateRetries+'/3.';await sleep(65000);batch--;continue}
    const data=await response.json().catch(()=>({state:'invalid_response'}));
-   if(!response.ok){log.textContent+='\nStopped: HTTP '+response.status+' — '+(data.reason||data.state||'request failed');progress.textContent='Stopped';break}
-   if(data.state==='team_search_batches_complete'){log.textContent+='\nAll searchable batches complete.';progress.textContent='Complete';done=true;break}
-   if(data.state!=='provider_team_search_batch_completed'){log.textContent+='\nStopped: '+(data.state||'unexpected response');progress.textContent='Stopped';break}
+   if(!response.ok){log.textContent+='\\nStopped: HTTP '+response.status+' — '+(data.reason||data.state||'request failed');progress.textContent='Stopped';break}
+   if(data.state==='team_search_batches_complete'){log.textContent+='\\nAll searchable batches complete.';progress.textContent='Complete';done=true;break}
+   if(data.state!=='provider_team_search_batch_completed'){log.textContent+='\\nStopped: '+(data.state||'unexpected response');progress.textContent='Stopped';break}
    const p=data.progress||{},m=data.identityMapping||{};
    const names=(data.processed||[]).map(x=>x.name).join(', ');
-   log.textContent='Batch '+batch+': '+(p.searchedTeams??'?')+'/'+(p.trackedTeams??80)+' teams searched; '+(p.candidateCount??0)+' candidates saved; '+(m.confirmed??0)+' confirmed mappings this batch; '+(data.retryableTeamsRemaining??'?')+' retryable teams remaining.\n'+names;
+   log.textContent='Batch '+batch+': '+(p.searchedTeams??'?')+'/'+(p.trackedTeams??80)+' teams searched; '+(p.candidateCount??0)+' candidates saved; '+(m.confirmed??0)+' confirmed mappings this batch; '+(data.retryableTeamsRemaining??'?')+' retryable teams remaining.\\n'+names;
    progress.textContent=(p.searchedTeams??'?')+'/'+(p.trackedTeams??80)+' searched';
    if(data.retryableTeamsRemaining===0){done=true;progress.textContent='Complete';break}
    rateRetries=0;
   }
-  if(!done&&progress.textContent!=='Stopped'){progress.textContent='Paused';log.textContent+='\nRun again later to continue any remaining retryable teams.'}
+  if(!done&&progress.textContent!=='Stopped'){progress.textContent='Paused';log.textContent+='\\nRun again later to continue any remaining retryable teams.'}
   load();
- }catch(e){progress.textContent='Error';log.textContent+='\nDiscovery request failed; check server and database status.'}
+ }catch(e){progress.textContent='Error';log.textContent+='\\nDiscovery request failed; check server and database status.'}
  finally{button.disabled=false}
 });
 document.getElementById('fetch-fixtures').addEventListener('click',async()=>{const date=document.getElementById('fixture-date').value;const out=document.getElementById('fixture-check');out.textContent='Checking providers…';try{const token=document.getElementById('provider-token').value;const r=await fetch('/api/providers/fixtures?date='+encodeURIComponent(date),{headers:token?{'x-provider-diagnostics-token':token}:{}});const data=await r.json();if(data.candidateCount!==undefined){out.textContent=JSON.stringify({state:data.state,date:data.date,candidateCount:data.candidateCount,canonicalFixturesCorroborated:data.canonicalFixturesCorroborated,verifiedResultsCreatedOrConfirmed:data.verifiedResultsCreatedOrConfirmed,conflictedGroups:data.conflictedGroups,canonicalEvidence:data.canonicalEvidence,persistence:data.persistence,cache:data.cache,cachedAt:data.cachedAt,retrievedAt:data.retrievedAt,candidateCountsByProvider:data.candidateCountsByProvider,candidateCountsByStatus:data.candidateCountsByStatus,reconciliationSummary:data.reconciliationSummary,providers:(data.providers||[]).map(p=>({name:p.name,state:p.diagnostics?.state,attemptedAt:p.diagnostics?.lastAttemptAt,succeededAt:p.diagnostics?.lastSuccessAt,records:p.diagnostics?.lastRecordCount,accepted:p.diagnostics?.lastAcceptedCount,rejected:p.diagnostics?.lastRejectedCount,rejectionReasons:p.diagnostics?.lastRejectionReasons,httpStatus:p.diagnostics?.lastHttpStatus,responseShape:p.diagnostics?.lastResponseShape,error:p.diagnostics?.lastErrorCode})),sampleCandidates:(data.sampleCandidates||[]).slice(0,5)},null,2);try{const s=await fetch('/api/storage/status').then(r=>r.json());document.getElementById('storage').textContent=s.state==='ready'?'Connected':s.state==='not_configured'?'Not configured':'Unavailable';document.getElementById('storage-detail').textContent=s.state==='ready'?s.observationCount+' observations saved':(s.errorCode||'Configure DATABASE_URL to persist observations')}catch{document.getElementById('storage-detail').textContent='Could not refresh storage status'}}else{out.textContent=JSON.stringify(data,null,2)}}catch(e){out.textContent='Provider check failed. Inspect server diagnostics.'}});load();</script>
