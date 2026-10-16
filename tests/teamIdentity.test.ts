@@ -58,7 +58,11 @@ test("does not guess a club's country, competition, or an ID when no provider ID
 test("normalizes accents and punctuation but does not strip team category suffixes", () => {
   const result = discoverTrackedTeamIdentities(
     [{ id: "team-1", canonicalName: "Tabor Sezana" }, { id: "team-2", canonicalName: "Inter Milan Women" }],
-    [candidate("api-football", "Tabor Sežana", "af-1"), candidate("api-football", "Inter Milan", "af-2")]
+    [
+      candidate("api-football", "Tabor Sežana", "af-1"),
+      candidate("sportapi-ai", "Tabor Sezana", "sa-1"),
+      candidate("api-football", "Inter Milan", "af-2")
+    ]
   );
   assert.equal(result[0]?.state, "resolved");
   assert.equal(result[1]?.state, "unresolved");
