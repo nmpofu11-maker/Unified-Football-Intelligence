@@ -1,3 +1,4 @@
+import "dotenv/config";
 import process from "node:process";
 
 const baseUrl = process.env.FOOTBALL_APP_URL?.trim();
