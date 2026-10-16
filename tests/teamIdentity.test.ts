@@ -28,8 +28,9 @@ test("uses only explicitly curated aliases and preserves youth/reserve distincti
     [{ id: "team-1", canonicalName: "Manchester United" }, { id: "team-2", canonicalName: "Benfica U19" }],
     [candidate("api-football", "Man Utd", "af-1"), candidate("api-football", "Benfica", "af-2")]
   );
-  assert.equal(result[0]?.state, "resolved");
+  assert.equal(result[0]?.state, "unresolved");
   assert.equal(result[0]?.identities[0]?.matchedBy, "curated_alias");
+  assert.ok(result[0]?.reasons.includes("identity_seen_in_fewer_than_two_providers"));
   assert.equal(result[1]?.state, "unresolved");
 });
 
