@@ -731,3 +731,118 @@ export async function persistTeamSearchObservations(
   }
 }
 
+
+export interface StoredTeamSearchProviderReview {
+  provider: "api-football" | "sportmonks";
+  state: string;
+  searchedAt: string;
+  candidates: Array<{
+    providerTeamId: string;
+    name: string;
+    country?: string;
+    gender?: string;
+    teamType?: string;
+    shortCode?: string;
+  }>;
+  errorCode?: string;
+}
+export interface StoredTeamSearchReview {
+  trackedTeamId: string;
+  canonicalName: string;
+  state: "never_searched" | "searched";
+  providers: StoredTeamSearchProviderReview[];
+}
+export interface StoredTeamSearchReviewSummary {
+  state: "ready" | "not_configured" | "error";
+  trackedTeams: number;
+  searchedTeams: number;
+  candidateCount: number;
+  teams: StoredTeamSearchReview[];
+  errorCode?: string;
+}
+
+/** Returns the latest persisted provider search per tracked team/provider for review only. */
+export async function getStoredTeamSearchReview(
+  trackedTeams: TrackedTeamIdentity[]
+): Promise<StoredTeamSearchReviewSummary> {
+  const configuredPool = getPool();
+  if (!configuredPool) {
+    return { state: "not_configured", trackedTeams: trackedTeams.length, searchedTeams: 0, candidateCount: 0, teams: [] };
+  }
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{
+      tracked_team_id: string;
+      tracked_team_name: string;
+      provider: "api-football" | "sportmonks";
+      search_state: string;
+      provider_team_id: string | null;
+      provider_team_name: string | null;
+      country: string | null;
+      gender: string | null;
+      team_type: string | null;
+      short_code: string | null;
+      error_code: string | null;
+      searched_at: Date;
+    }>(`
+      WITH latest AS (
+        SELECT tracked_team_id, provider, MAX(searched_at) AS searched_at
+        FROM team_search_observations
+        GROUP BY tracked_team_id, provider
+      )
+      SELECT s.tracked_team_id, s.tracked_team_name, s.provider, s.search_state,
+             s.provider_team_id, s.provider_team_name, s.country, s.gender,
+             s.team_type, s.short_code, s.error_code, s.searched_at
+      FROM team_search_observations s
+      JOIN latest l
+        ON l.tracked_team_id = s.tracked_team_id
+       AND l.provider = s.provider
+       AND l.searched_at = s.searched_at
+      ORDER BY s.tracked_team_id, s.provider, s.provider_team_id NULLS FIRST
+    `);
+    const byTeam = new Map<string, StoredTeamSearchReview>();
+    for (const team of trackedTeams) {
+      byTeam.set(team.id, { trackedTeamId: team.id, canonicalName: team.canonicalName, state: "never_searched", providers: [] });
+    }
+    for (const row of result.rows) {
+      const team = byTeam.get(row.tracked_team_id);
+      if (!team) continue;
+      let provider = team.providers.find(item => item.provider === row.provider);
+      if (!provider) {
+        provider = {
+          provider: row.provider,
+          state: row.search_state,
+          searchedAt: row.searched_at.toISOString(),
+          candidates: [],
+          ...(row.error_code ? { errorCode: row.error_code } : {})
+        };
+        team.providers.push(provider);
+      }
+      if (row.provider_team_id && row.provider_team_name) {
+        provider.candidates.push({
+          providerTeamId: row.provider_team_id,
+          name: row.provider_team_name,
+          ...(row.country ? { country: row.country } : {}),
+          ...(row.gender ? { gender: row.gender } : {}),
+          ...(row.team_type ? { teamType: row.team_type } : {}),
+          ...(row.short_code ? { shortCode: row.short_code } : {})
+        });
+      }
+      team.state = "searched";
+    }
+    const teams = [...byTeam.values()];
+    return {
+      state: "ready",
+      trackedTeams: teams.length,
+      searchedTeams: teams.filter(team => team.state === "searched").length,
+      candidateCount: teams.reduce((sum, team) => sum + team.providers.reduce((providerSum, provider) => providerSum + provider.candidates.length, 0), 0),
+      teams
+    };
+  } catch (error) {
+    return { state: "error", trackedTeams: trackedTeams.length, searchedTeams: 0, candidateCount: 0, teams: [], errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
