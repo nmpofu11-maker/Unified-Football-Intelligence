@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "tsx src/server.ts",
+    "discover:favourite-teams": "tsx scripts/discover-favourite-teams.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test",

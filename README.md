@@ -31,6 +31,27 @@ Monitor broadly, build deeper verified histories for the original 80 priority te
 - Historical result backfill, immutable prediction ledger, chronological backtesting, calibration, odds ingestion, TheRundown integration, authentication and production deployment are not complete.
 - Betting recommendations remain disabled. The Poisson baseline is exploratory and not a calibrated betting model.
 
+## Favourite-team identity discovery
+
+After the updated server is deployed with PostgreSQL configured and both API-Football and Sportmonks credentials available, set these variables in your local, git-ignored `.env` file (do not commit it):
+
+```dotenv
+FOOTBALL_APP_URL=https://your-deployed-app.example
+PROVIDER_DIAGNOSTICS_TOKEN=your-configured-token
+```
+
+Then run the paced discovery runner from a trusted machine:
+
+```bash
+npm run discover:favourite-teams
+```
+
+The runner processes up to five teams per request, waits between requests to respect the team-search rate limit, and stores provider candidates plus conservative cross-provider identity decisions. It does not print the token. It stops at the configured maximum of 32 batches; set `TEAM_SEARCH_MAX_BATCHES` to a lower value if you want a shorter run. Alternatively, the deployed dashboard provides a **Discover favourite teams** control with visible progress and the same paced batch endpoint.
+
+Review progress at `/api/teams/watchlist` and saved candidates at `/api/teams/provider-search/results`. A mapping is only confirmed when both provider catalogues return one exact/curated-name candidate and their country metadata agrees. Ambiguous and unresolved teams remain unmapped. Identity mapping does not create verified historical results or enable betting recommendations.
+
+Never commit the token or put it into a public URL. Use the same `PROVIDER_DIAGNOSTICS_TOKEN` configured on the deployed server.
+
 ## Development
 
 Requires Node.js 22+.
@@ -45,4 +66,4 @@ npm run dev
 
 Copy `.env.example` to `.env`. Set `DATABASE_URL` to a PostgreSQL connection URL only when you have a database provisioned. Never commit `.env` or paste API/database secrets into chat. The core server can start without Gemini; no Gemini key is required.
 
-See `docs/POSTGRES_SETUP.md` for configuring and verifying durable storage. See `docs/NEW_REPO_SETUP.md` for the separate GitHub repository setup steps. See `docs/ARCHITECTURE.md`, `docs/BUILD_PLAN.md`, `docs/DATA_INTEGRITY.md`, `docs/PROVIDER_CONTRACTS.md`, `docs/PERSISTENCE.md`, `docs/SOURCE_AUDIT.md`, and `docs/STATUS.md`.
+See `docs/POSTGRES_SETUP.md` for configuring and verifying durable storage, and `docs/LIVE_VERIFICATION_RUNBOOK.md` for the exact deployment, discovery, and restart-durability checks. See `docs/NEW_REPO_SETUP.md` for the separate GitHub repository setup steps. See `docs/ARCHITECTURE.md`, `docs/BUILD_PLAN.md`, `docs/DATA_INTEGRITY.md`, `docs/PROVIDER_CONTRACTS.md`, `docs/PERSISTENCE.md`, `docs/SOURCE_AUDIT.md`, and `docs/STATUS.md`.

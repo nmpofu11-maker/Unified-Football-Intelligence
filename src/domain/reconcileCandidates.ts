@@ -1,6 +1,6 @@
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
 
-export type CandidateMatchState = "single_source" | "corroborated" | "conflicted";
+export type CandidateMatchState = "single_source" | "corroborated" | "conflicted" | "stale";
 
 export interface CandidateMatchPreview {
   key: string;
@@ -20,22 +20,56 @@ const normalise = (value: string): string =>
   value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 
+// Exact, curated aliases only; never use fuzzy matching for identity decisions.
+const TEAM_ALIASES: Record<string, string> = {
+  "man utd": "manchester united",
+  "man united": "manchester united",
+  "manchester utd": "manchester united",
+  "man city": "manchester city",
+  "nottm forest": "nottingham forest",
+  "wolves": "wolverhampton wanderers",
+  "qpr": "queens park rangers",
+  "spurs": "tottenham hotspur",
+  "ath madrid": "atletico madrid",
+  "atletico de madrid": "atletico madrid",
+  "internazionale": "inter",
+  "fc internazionale milano": "inter",
+  "psg": "paris saint germain"
+};
+
+const COMPETITION_ALIASES: Record<string, string> = {
+  "english premier league": "premier league",
+  "england premier league": "premier league",
+  "epl": "premier league",
+  "english championship": "championship",
+  "england championship": "championship",
+  "uefa champions league": "champions league",
+  "uefa europa league": "europa league",
+  "uefa conference league": "conference league"
+};
+
+function canonicalName(value: string, aliases: Record<string, string>): string {
+  const normalized = normalise(value);
+  return aliases[normalized] ?? normalized;
+}
+
 function baseKey(f: ProviderFixtureCandidate): string {
   return [
-    normalise(f.home.name),
-    normalise(f.away.name),
-    normalise(f.competition.name)
+    canonicalName(f.home.name, TEAM_ALIASES),
+    canonicalName(f.away.name, TEAM_ALIASES),
+    canonicalName(f.competition.name, COMPETITION_ALIASES)
   ].join("|");
 }
 
 /**
  * Conservative cross-provider corroboration preview. This intentionally does not
  * create canonical fixtures, resolve team/competition IDs, or verify result evidence.
- * Only exact normalized names and kickoff times within five minutes are grouped.
+ * Curated exact aliases bridge known naming variants; kickoff times must still be within five minutes.
  */
 export function previewCandidateReconciliation(
   candidates: ProviderFixtureCandidate[],
-  kickoffToleranceMs = 5 * 60_000
+  kickoffToleranceMs = 5 * 60_000,
+  nowMs = Date.now()
 ): CandidateMatchPreview[] {
   const buckets = new Map<string, ProviderFixtureCandidate[]>();
   for (const candidate of candidates) {
@@ -69,11 +103,29 @@ export function previewCandidateReconciliation(
       const reasons: string[] = [];
       if (providers.length < 2) reasons.push("only_one_provider_observation");
       if (statuses.length > 1) reasons.push("provider_status_disagreement");
+      // A live status is stale if either its observation timestamp or the current
+      // wall clock is more than six hours after kickoff. Some feeds preserve an old
+      // event timestamp in the payload, so observedAt alone is not a safe freshness gate.
+      // Do not infer a final score or expose stale live data as a current corroborated fixture.
+      const staleLiveObservation = group.some(item =>
+        item.status === "live" &&
+        Math.max(Date.parse(item.observedAt), nowMs) - Date.parse(item.kickoffUtc) > 6 * 60 * 60_000
+      );
+      if (staleLiveObservation) reasons.push("stale_live_status");
       if (scores.length > 1) reasons.push("provider_score_disagreement");
       if (group.some(item => item.status === "finished" && !item.score)) reasons.push("finished_observation_missing_score");
-      const state: CandidateMatchState = reasons.some(reason =>
-        reason === "provider_status_disagreement" || reason === "provider_score_disagreement"
-      ) ? "conflicted" : providers.length >= 2 ? "corroborated" : "single_source";
+      // Freshness is distinct from provider disagreement. Stale-only groups are
+      // explicitly blocked as "stale"; genuine status/score disagreements remain
+      // "conflicted". Only corroborated groups can enter the canonical read model.
+      const hasProviderConflict = reasons.some(reason =>
+        reason === "provider_status_disagreement" ||
+        reason === "provider_score_disagreement"
+      );
+      const state: CandidateMatchState = hasProviderConflict
+        ? "conflicted"
+        : staleLiveObservation
+          ? "stale"
+          : providers.length >= 2 ? "corroborated" : "single_source";
       const representative = group[0]!;
       previews.push({
         key: `${key}|${Math.min(...group.map(item => Date.parse(item.kickoffUtc))) }`,
