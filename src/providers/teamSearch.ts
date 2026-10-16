@@ -23,6 +23,21 @@ function stateForStatus(status: number): TeamSearchProviderResult["state"] {
   if ([401, 403].includes(status)) return "auth_error";
   return "http_error";
 }
+
+// Provider error bodies are deliberately reduced to stable, non-sensitive categories.
+// Never persist or return the raw provider message because it may contain account details.
+function providerErrorCode(payload: unknown): string {
+  const root = object(payload);
+  const errors = root?.errors;
+  const values = Array.isArray(errors) ? errors : errors && typeof errors === "object" ? Object.values(errors) : [];
+  const summary = values.map(value => typeof value === "string" ? value : JSON.stringify(value))
+    .join(" ").toLowerCase();
+  if (/rate.?limit|too many requests|requests per minute/.test(summary)) return "provider_rate_limited";
+  if (/invalid api.?key|api.?key.*invalid|invalid token|unauthori[sz]ed|authentication|access token/.test(summary)) return "provider_auth_error";
+  if (/subscription|plan|not available on your plan|not allowed|access to this endpoint|endpoint.*access/.test(summary)) return "provider_plan_or_access_restriction";
+  if (/parameter|query.*invalid|invalid.*search|missing.*parameter/.test(summary)) return "provider_invalid_request";
+  return "provider_reported_error";
+}
 function candidatesFromApiFootball(payload: unknown): TeamSearchCandidate[] | null {
   const root = object(payload);
   if (!root || !Array.isArray(root.response)) return null;
@@ -88,11 +103,17 @@ async function requestSearch(
     try { payload = await response.json(); } catch { return { provider, state: "schema_error", candidates: [], errorCode: "invalid_json" }; }
     const root = object(payload);
     const providerErrors = root?.errors;
-    if (Array.isArray(providerErrors) && providerErrors.length > 0) {
-      return { provider, state: "schema_error", candidates: [], errorCode: "provider_reported_error" };
-    }
-    if (providerErrors && typeof providerErrors === "object" && Object.keys(providerErrors).length > 0) {
-      return { provider, state: "schema_error", candidates: [], errorCode: "provider_reported_error" };
+    const hasProviderErrors = Array.isArray(providerErrors)
+      ? providerErrors.length > 0
+      : Boolean(providerErrors && typeof providerErrors === "object" && Object.values(providerErrors).some(value =>
+          value != null && value !== "" && value !== false && !(Array.isArray(value) && value.length === 0)
+        ));
+    if (hasProviderErrors) {
+      const errorCode = providerErrorCode(payload);
+      const state: TeamSearchProviderResult["state"] =
+        errorCode === "provider_rate_limited" ? "rate_limited" :
+        errorCode === "provider_auth_error" ? "auth_error" : "schema_error";
+      return { provider, state, candidates: [], errorCode };
     }
     const candidates = parse(payload);
     if (!candidates) return { provider, state: "schema_error", candidates: [], errorCode: "unexpected_response_shape" };
@@ -135,6 +156,10 @@ export async function searchTeamAcrossProviders(
         url.searchParams.set("include", "country");
         url.searchParams.set("per_page", "50");
         url.searchParams.set("page", "1");
+        // Match the credential transport used by the fixture adapter and supported
+        // across Sportmonks v3 deployments. Keep the Authorization header for
+        // deployments that also accept it; never log or expose either credential.
+        url.searchParams.set("api_token", sportmonksKey);
         return requestSearch("sportmonks", url, { Authorization: sportmonksKey }, candidatesFromSportmonks, signal, fetchImpl);
       })()
     : Promise.resolve<TeamSearchProviderResult>({ provider: "sportmonks", state: "unavailable", candidates: [], errorCode: "credential_not_configured" });
