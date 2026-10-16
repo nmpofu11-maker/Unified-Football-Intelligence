@@ -9,6 +9,7 @@ import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
 import { discoverTrackedTeamIdentities } from "./domain/teamIdentity.js";
+import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
 import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
@@ -176,6 +177,45 @@ app.post("/api/history/replay", async (req: Request, res: Response) => {
   });
 });
 
+
+app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+  const now = Date.now();
+  const ip = req.ip || "unknown";
+  const recent = (requestWindows.get(ip) ?? []).filter(t => now - t < 60_000);
+  if (recent.length >= 6) return res.status(429).json({ state: "rate_limited", reason: "provider_check_limit_6_per_minute" });
+  recent.push(now);
+  requestWindows.set(ip, recent);
+
+  const rawIds = String(req.query?.teamIds ?? "");
+  const ids = [...new Set(rawIds.split(",").map(value => value.trim()).filter(Boolean))];
+  if (!ids.length || ids.length > 3) {
+    return res.status(400).json({ state: "invalid_request", reason: "provide_one_to_three_teamIds" });
+  }
+  const trackedTeams = teamSeed.teams.filter(team => ids.includes(team.id));
+  if (trackedTeams.length !== ids.length) {
+    return res.status(400).json({ state: "invalid_request", reason: "unknown_team_id", acceptedTeamIds: trackedTeams.map(team => team.id) });
+  }
+  const results = await Promise.all(trackedTeams.map(async team => ({
+    trackedTeamId: team.id,
+    canonicalName: team.canonicalName,
+    state: "discovery_only" as const,
+    providers: await searchTeamAcrossProviders(team.canonicalName)
+  })));
+  return res.json({
+    state: "provider_team_search_completed",
+    resultCount: results.length,
+    results,
+    note: "Provider search results are candidates only. They do not write or approve canonical mappings. Review name, country, gender/category and competition context before any identity is accepted. Search at most three favourite teams per request to protect provider quotas."
+  });
+});
 
 app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
   const discovery = await getStoredTeamIdentityDiscovery(teamSeed.teams);
