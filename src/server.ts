@@ -216,6 +216,10 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
     }
     trackedTeams = teamSeed.teams.slice(batch * 5, batch * 5 + 5);
   }
+  const storageCheck = await getStoredTeamSearchReview(teamSeed.teams);
+  if (storageCheck.state !== "ready") {
+    return res.status(503).json({ state: storageCheck.state, reason: storageCheck.errorCode ?? "durable_team_search_storage_required" });
+  }
   const results = await Promise.all(trackedTeams.map(async team => ({
     trackedTeamId: team.id,
     canonicalName: team.canonicalName,
@@ -223,6 +227,9 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
     providers: await searchTeamAcrossProviders(team.canonicalName)
   })));
   const persistence = await persistTeamSearchObservations(results);
+  if (persistence.state !== "saved") {
+    return res.status(503).json({ state: "persistence_failed", persistence, reason: "team_search_results_not_durably_saved" });
+  }
   const identityMapping = persistence.state === "saved"
     ? await reconcileStoredTeamSearchCandidates(trackedTeams)
     : { state: persistence.state === "error" ? "error" as const : "not_configured" as const, trackedTeams: trackedTeams.length, confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, skippedIncompleteSearch: trackedTeams.length, mappings: [] };
@@ -286,6 +293,9 @@ app.post("/api/teams/provider-search/next-batch", async (req: Request, res: Resp
     providers: await searchTeamAcrossProviders(team.canonicalName)
   })));
   const persistence = await persistTeamSearchObservations(results);
+  if (persistence.state !== "saved") {
+    return res.status(503).json({ state: "persistence_failed", persistence, reason: "team_search_results_not_durably_saved" });
+  }
   const identityMapping = persistence.state === "saved"
     ? await reconcileStoredTeamSearchCandidates(trackedTeams)
     : { state: persistence.state === "error" ? "error" as const : "not_configured" as const, trackedTeams: trackedTeams.length, confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, skippedIncompleteSearch: trackedTeams.length, mappings: [] };
