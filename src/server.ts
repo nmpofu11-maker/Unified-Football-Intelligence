@@ -332,6 +332,31 @@ app.get("/api/teams/provider-search/results", async (req: Request, res: Response
 });
 
 
+app.post("/api/teams/provider-search/reconcile", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+
+  // Reconcile the latest saved searches only. This endpoint intentionally makes no
+  // calls to provider APIs, so it can safely migrate/re-evaluate existing discoveries.
+  const identityMapping = await reconcileStoredTeamSearchCandidates(teamSeed.teams);
+  const { state: reconciliationState, ...mappingDetails } = identityMapping;
+  return res.status(reconciliationState === "saved" ? 200 : 503).json({
+    state: reconciliationState === "saved"
+      ? "saved_team_searches_reconciled"
+      : reconciliationState,
+    ...mappingDetails,
+    providerRequestsMade: 0,
+    note: "Reconciles the latest persisted provider-search observations for all favourite teams. It does not make provider API calls, invent missing identities, or mark a one-provider candidate as cross-provider confirmed."
+  });
+});
+
+
 app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
   const [discovery, searchReview, identityMappings] = await Promise.all([
     getStoredTeamIdentityDiscovery(teamSeed.teams),
