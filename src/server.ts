@@ -10,7 +10,7 @@ import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
 import { discoverTrackedTeamIdentities } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -209,9 +209,11 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
     state: "discovery_only" as const,
     providers: await searchTeamAcrossProviders(team.canonicalName)
   })));
+  const persistence = await persistTeamSearchObservations(results);
   return res.json({
     state: "provider_team_search_completed",
     resultCount: results.length,
+    persistence,
     results,
     note: "Provider search results are candidates only. They do not write or approve canonical mappings. Review name, country, gender/category and competition context before any identity is accepted. Search at most three favourite teams per request to protect provider quotas."
   });
