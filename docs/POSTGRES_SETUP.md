@@ -64,5 +64,5 @@ If no records were returned by a provider, a `connected_empty` result can still 
 - PostgreSQL stores provider observations with provider IDs, observed time, provenance and raw normalized payload.
 - Observations retain `evidenceState: "unverified"`. The database write path rejects candidates with any other evidence state.
 - Canonical fixture creation remains disabled; the reconciliation output is only a preview.
-- Team/provider/competition identity mappings and settled-result verification remain outstanding.
+- Strict provider team identity mappings are persisted when unique exact/curated-name candidates from API-Football and Sportmonks agree on country. Ambiguous and unresolved teams remain unconfirmed. Competition/season mapping and settled-result verification remain outstanding.
 - Verified history, calibrated forecasts, and betting recommendations remain disabled until their separate evidence and validation gates pass.
