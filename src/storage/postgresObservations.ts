@@ -938,9 +938,7 @@ export async function reconcileStoredTeamSearchCandidates(
     }
     const mappings: TeamSearchIdentityResolution[] = [];
     let skippedIncompleteSearch = 0;
-    let clientTransactionOpen = false;
     await client.query("BEGIN");
-    clientTransactionOpen = true;
     for (const team of trackedTeams) {
       const providerResults = resultsByTeam.get(team.id) ?? [];
       const complete = providerResults.length === 2 && !failedTeams.has(team.id);
@@ -974,7 +972,6 @@ export async function reconcileStoredTeamSearchCandidates(
       }
     }
     await client.query("COMMIT");
-    clientTransactionOpen = false;
     return {
       state: "saved", trackedTeams: trackedTeams.length,
       confirmed: mappings.filter(item => item.state === "confirmed").length,
