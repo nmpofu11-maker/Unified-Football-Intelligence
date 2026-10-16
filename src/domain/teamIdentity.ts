@@ -115,3 +115,62 @@ export function discoverTrackedTeamIdentities(
     };
   });
 }
+
+export interface TeamSearchIdentityResolution {
+  trackedTeamId: string;
+  canonicalName: string;
+  state: "confirmed" | "ambiguous" | "unresolved";
+  identities: Array<{
+    provider: "api-football" | "sportmonks";
+    providerTeamId: string;
+    providerName: string;
+    country: string;
+  }>;
+  reasons: string[];
+}
+
+/**
+ * Confirms a provider identity only when both provider catalogues return one
+ * exact/curated-name candidate and their country metadata agrees. It never
+ * strips youth, reserve, or women's qualifiers.
+ */
+export function reconcileTeamSearchIdentity(
+  tracked: TrackedTeamIdentity,
+  providerResults: import("../providers/teamSearch.js").TeamSearchProviderResult[]
+): TeamSearchIdentityResolution {
+  const matchingNames = namesFor(tracked);
+  const normalizeCountry = (value: string): string =>
+    value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+  const providers = (["api-football", "sportmonks"] as const).map(provider => {
+    const result = providerResults.find(item => item.provider === provider);
+    const candidates = (result?.candidates ?? []).filter(candidate => matchingNames.has(normalise(candidate.name)));
+    return { provider, result, candidates };
+  });
+  const reasons = new Set<string>();
+  const identities: TeamSearchIdentityResolution["identities"] = [];
+  if (providers.some(item => item.candidates.length > 1)) {
+    reasons.add("multiple_exact_candidates_within_provider");
+    return { trackedTeamId: tracked.id, canonicalName: tracked.canonicalName, state: "ambiguous", identities: [], reasons: [...reasons] };
+  }
+  const [api, sportmonks] = providers;
+  if (api.candidates.length !== 1 || sportmonks.candidates.length !== 1) {
+    reasons.add("requires_one_exact_candidate_from_each_provider");
+    if (api.candidates.length === 0 && sportmonks.candidates.length === 0) reasons.add("no_exact_or_curated_alias_search_candidate");
+    return { trackedTeamId: tracked.id, canonicalName: tracked.canonicalName, state: "unresolved", identities: [], reasons: [...reasons] };
+  }
+  const apiCandidate = api.candidates[0]!;
+  const sportmonksCandidate = sportmonks.candidates[0]!;
+  if (!apiCandidate.country?.trim() || !sportmonksCandidate.country?.trim()) {
+    reasons.add("country_metadata_missing");
+    return { trackedTeamId: tracked.id, canonicalName: tracked.canonicalName, state: "unresolved", identities: [], reasons: [...reasons] };
+  }
+  if (normalizeCountry(apiCandidate.country) !== normalizeCountry(sportmonksCandidate.country)) {
+    reasons.add("provider_country_conflict");
+    return { trackedTeamId: tracked.id, canonicalName: tracked.canonicalName, state: "ambiguous", identities: [], reasons: [...reasons] };
+  }
+  identities.push(
+    { provider: "api-football", providerTeamId: apiCandidate.providerTeamId, providerName: apiCandidate.name, country: apiCandidate.country },
+    { provider: "sportmonks", providerTeamId: sportmonksCandidate.providerTeamId, providerName: sportmonksCandidate.name, country: sportmonksCandidate.country }
+  );
+  return { trackedTeamId: tracked.id, canonicalName: tracked.canonicalName, state: "confirmed", identities, reasons: ["unique_exact_name_and_country_match_across_two_providers"] };
+}
