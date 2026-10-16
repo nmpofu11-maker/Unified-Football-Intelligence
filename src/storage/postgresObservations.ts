@@ -942,10 +942,15 @@ export async function reconcileStoredTeamSearchCandidates(
     for (const team of trackedTeams) {
       const providerResults = resultsByTeam.get(team.id) ?? [];
       const complete = providerResults.length === 2 && !failedTeams.has(team.id);
-      if (!complete) {
+      // Reconcile any available provider observations. A timeout, provider error,
+      // or empty catalogue response must not discard a unique exact candidate
+      // returned by the healthy provider. The resolver keeps partial identities
+      // unresolved until cross-provider evidence is sufficient.
+      if (providerResults.length === 0) {
         skippedIncompleteSearch++;
         continue;
       }
+      if (!complete) skippedIncompleteSearch++;
       const resolution = reconcileTeamSearchIdentity(team, providerResults);
       mappings.push(resolution);
       const sourceSearchAt = timestampsByTeam.get(team.id) ?? null;
