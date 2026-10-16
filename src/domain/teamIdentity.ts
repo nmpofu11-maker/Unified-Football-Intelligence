@@ -4,6 +4,10 @@ export interface TrackedTeamIdentity {
   id: string;
   canonicalName: string;
   aliases?: string[];
+  /** User-confirmed watchlist metadata, used to reject wrong-country search candidates. */
+  country?: string;
+  league?: string;
+  teamCategory?: string;
 }
 export interface DiscoveredProviderIdentity {
   provider: string;
@@ -36,7 +40,15 @@ const CURATED_ALIASES: Record<string, string[]> = {
   "inter": ["internazionale", "fc internazionale milano"],
   "paris saint germain": ["psg"],
   "st johnstone f.c.": ["st johnstone", "st. johnstone"],
-  "st. patrick's athletic": ["st patricks athletic", "st patrick's athletic"]
+  "st. patrick's athletic": ["st patricks athletic", "st patrick's athletic"],
+  // Provider catalogues may expose the senior Belgian club under its registered
+  // "KV" form. Category suffixes for other Brugge squads are intentionally absent.
+  "club brugge": ["club brugge kv"],
+  "fc nantes": ["nantes"],
+  "rc sporting charleroi": ["sporting charleroi", "royal charleroi sporting club"],
+  "shelbourne women": ["shelbourne w"],
+  "linfield women": ["linfield w"],
+  "sligo rovers women": ["sligo rovers w"]
 };
 
 function namesFor(team: TrackedTeamIdentity): Map<string, "canonical_name" | "curated_alias"> {
@@ -143,7 +155,14 @@ export function reconcileTeamSearchIdentity(
     value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
   const providers = (["api-football", "sportmonks"] as const).map(provider => {
     const result = providerResults.find(item => item.provider === provider);
-    const candidates = (result?.candidates ?? []).filter(candidate => matchingNames.has(normalise(candidate.name)));
+    const candidates = (result?.candidates ?? []).filter(candidate => {
+      if (!matchingNames.has(normalise(candidate.name))) return false;
+      // The favourite watchlist's country is authoritative context. If a provider
+      // supplies conflicting country metadata, never accept that candidate as this team.
+      if (tracked.country?.trim() && candidate.country?.trim() &&
+          normalizeCountry(candidate.country) !== normalizeCountry(tracked.country)) return false;
+      return true;
+    });
     return { provider, result, candidates };
   });
   const reasons = new Set<string>();
