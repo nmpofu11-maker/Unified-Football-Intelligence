@@ -2,6 +2,7 @@ import { Pool, type PoolClient } from "pg";
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
 import { previewCandidateReconciliation } from "../domain/reconcileCandidates.js";
 import { discoverTrackedTeamIdentities, type TrackedTeamIdentity, type TeamIdentityDiscovery } from "../domain/teamIdentity.js";
+import type { TeamSearchProviderResult } from "../providers/teamSearch.js";
 
 export type ObservationPersistenceState = "saved" | "connected_empty" | "not_configured" | "error";
 
@@ -86,6 +87,29 @@ async function ensureSchema(client: PoolClient): Promise<void> {
   await client.query(`
     CREATE INDEX IF NOT EXISTS provider_fixture_observations_identity_lookup_idx
     ON provider_fixture_observations (provider, provider_fixture_id)
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS team_search_observations (
+      id BIGSERIAL PRIMARY KEY,
+      tracked_team_id TEXT NOT NULL,
+      tracked_team_name TEXT NOT NULL,
+      provider TEXT NOT NULL CHECK (provider IN ('api-football','sportmonks')),
+      search_state TEXT NOT NULL,
+      provider_team_id TEXT,
+      provider_team_name TEXT,
+      country TEXT,
+      gender TEXT,
+      team_type TEXT,
+      short_code TEXT,
+      error_code TEXT,
+      searched_at TIMESTAMPTZ NOT NULL,
+      candidate JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS team_search_observations_latest_idx
+    ON team_search_observations (tracked_team_id, provider, searched_at DESC)
   `);
   await client.query(`
     CREATE TABLE IF NOT EXISTS canonical_fixture_evidence (
@@ -644,3 +668,66 @@ export async function getObservationStoreSummary(): Promise<ObservationStoreSumm
     client?.release();
   }
 }
+
+export interface TeamSearchPersistenceInput {
+  trackedTeamId: string;
+  canonicalName: string;
+  providers: TeamSearchProviderResult[];
+}
+export interface TeamSearchPersistenceResult {
+  state: "saved" | "not_configured" | "error";
+  searchGroups: number;
+  candidateCount: number;
+  rowsInserted: number;
+  errorCode?: string;
+}
+
+/** Persist provider catalogue search outcomes as discovery observations, never as approved mappings. */
+export async function persistTeamSearchObservations(
+  searches: TeamSearchPersistenceInput[]
+): Promise<TeamSearchPersistenceResult> {
+  const configuredPool = getPool();
+  const searchGroups = searches.reduce((total, item) => total + item.providers.length, 0);
+  const candidateCount = searches.reduce((total, item) => total + item.providers.reduce((n, result) => n + result.candidates.length, 0), 0);
+  if (!configuredPool) return { state: "not_configured", searchGroups, candidateCount, rowsInserted: 0 };
+  if (searches.some(item => !item.trackedTeamId.trim() || !item.canonicalName.trim() ||
+      item.providers.some(provider => !["api-football", "sportmonks"].includes(provider.provider)))) {
+    return { state: "error", searchGroups, candidateCount, rowsInserted: 0, errorCode: "team_search_validation_failed" };
+  }
+  let client: PoolClient | undefined;
+  let rowsInserted = 0;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    await client.query("BEGIN");
+    const searchedAt = new Date().toISOString();
+    for (const search of searches) {
+      for (const providerResult of search.providers) {
+        const candidates = providerResult.candidates.length ? providerResult.candidates : [null];
+        for (const candidate of candidates) {
+          await client.query(
+            `INSERT INTO team_search_observations
+              (tracked_team_id, tracked_team_name, provider, search_state, provider_team_id,
+               provider_team_name, country, gender, team_type, short_code, error_code, searched_at, candidate)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)`,
+            [
+              search.trackedTeamId, search.canonicalName, providerResult.provider, providerResult.state,
+              candidate?.providerTeamId ?? null, candidate?.name ?? null, candidate?.country ?? null,
+              candidate?.gender ?? null, candidate?.teamType ?? null, candidate?.shortCode ?? null,
+              providerResult.errorCode ?? null, searchedAt, candidate ? JSON.stringify(candidate) : null
+            ]
+          );
+          rowsInserted++;
+        }
+      }
+    }
+    await client.query("COMMIT");
+    return { state: "saved", searchGroups, candidateCount, rowsInserted };
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => undefined);
+    return { state: "error", searchGroups, candidateCount, rowsInserted: 0, errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
