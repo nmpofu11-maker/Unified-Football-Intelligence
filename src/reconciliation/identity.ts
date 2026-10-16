@@ -12,8 +12,8 @@ export function normalizeIdentityName(value: string): string {
     .replace(/[’']/g, "'").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
-export function resolveTeamIdentity(provider: string, providerTeamId: string, name: string, teams: Team[]): IdentityResolution {
-  const byId = teams.filter(t => t.providerIds[provider] === providerTeamId);
+export function resolveTeamIdentity(provider: string, providerTeamId: string | undefined, name: string, teams: Team[]): IdentityResolution {
+  const byId = providerTeamId ? teams.filter(t => t.providerIds[provider] === providerTeamId) : [];
   if (byId.length > 1) return { state: "conflict", candidates: byId.map(t => t.id), reason: "provider_team_id_maps_to_multiple_canonical_teams" };
   if (byId.length === 1) {
     const team = byId[0]!;
@@ -28,8 +28,8 @@ export function resolveTeamIdentity(provider: string, providerTeamId: string, na
   return { state: "unresolved", candidates: [], reason: "no_exact_canonical_team_mapping" };
 }
 
-export function resolveCompetitionIdentity(provider: string, providerCompetitionId: string, name: string, competitions: Competition[]): IdentityResolution {
-  const byId = competitions.filter(c => c.providerIds[provider] === providerCompetitionId);
+export function resolveCompetitionIdentity(provider: string, providerCompetitionId: string | undefined, name: string, competitions: Competition[]): IdentityResolution {
+  const byId = providerCompetitionId ? competitions.filter(c => c.providerIds[provider] === providerCompetitionId) : [];
   if (byId.length > 1) return { state: "conflict", candidates: byId.map(c => c.id), reason: "provider_competition_id_maps_to_multiple_canonical_competitions" };
   if (byId.length === 1) {
     const competition = byId[0]!;

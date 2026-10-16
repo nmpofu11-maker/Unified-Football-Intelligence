@@ -18,7 +18,8 @@
 - [x] Exact/provider-ID team and competition resolution; unresolved and ambiguous identities are blocked.
 - [x] Conflict-aware settled-result reconciliation.
 - [x] Seed the 80 original team names verbatim with unresolved provider mappings.
-- [ ] Connect identity registry to persistent storage and add explicit reviewed alias-management workflow.
+- [x] Persist strict cross-provider team identity decisions separately from raw search observations.
+- [ ] Add explicit reviewed alias-management workflow and complete duplicate, postponement, abandonment, provider-ID reuse and correction migration tests against PostgreSQL.
 - [ ] Complete duplicate, postponement, abandonment, provider-ID reuse and correction migration tests against PostgreSQL.
 
 **Gate:** no silent identity merges; every stored fact has provenance; unresolved records cannot enter model history.
@@ -28,8 +29,9 @@
 - [x] SportAPI.ai and Sportmonks on-demand adapters with schema validation and explicit diagnostics.
 - [x] Distinguish valid empty response, partial response, rate limit, auth failure and network error.
 - [x] Expose `/api/providers/fixtures?date=YYYY-MM-DD` for on-demand provider diagnostics.
-- [ ] Verify live calls and coverage with authorized credentials.
-- [ ] Add scheduler, caching, bounded retry/backoff, persisted raw evidence and canonical reconciliation API.
+- [ ] Verify live calls and coverage with authorized credentials; source code is CI-verified but no live provider call has yet been verified.
+- [x] Add persisted raw evidence, persisted team-search results, conservative identity reconciliation and a rate-limited next-batch endpoint.
+- [ ] Add a scheduled production worker, durable job state, caching/backoff telemetry and live integration tests.
 - [ ] Implement TheRundown as secondary adapter; keep API-Football optional.
 
 **Gate:** live provider checks pass, no secrets leak, and each candidate is reconciled or explicitly unresolved.
@@ -37,7 +39,9 @@
 ## Phase 3 — deep tracked-team history — list seeded, data not loaded
 
 - [x] Import the original 80 names verbatim from `LOCKED_80_TEAMS` with source blob reference.
-- [ ] Review provider IDs, aliases, competitions and seasons for every team.
+- [x] Search provider team catalogues directly and persist candidates for the original 80 names.
+- [x] Automatically confirm only unique exact/curated-name matches across API-Football and Sportmonks when country metadata agrees.
+- [ ] Review unresolved/ambiguous provider IDs and complete competition/season mappings for every team.
 - [ ] Backfill historical results with source IDs and retrieval/effective timestamps.
 - [ ] Build per-team sample counts, date ranges, competition breakdown and missingness reports.
 

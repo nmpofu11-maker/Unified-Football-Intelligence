@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "tsx src/server.ts",
+    "discover:favourite-teams": "tsx scripts/discover-favourite-teams.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test",
@@ -15,12 +16,14 @@
   },
   "dependencies": {
     "express": "^4.21.2",
-    "dotenv": "^17.2.3"
+    "dotenv": "^17.2.3",
+    "pg": "^8.16.3"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "tsx": "^4.19.3",
-    "typescript": "^5.8.2"
+    "typescript": "^5.8.2",
+    "@types/pg": "^8.15.5"
   }
 }
