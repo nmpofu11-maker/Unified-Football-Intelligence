@@ -8,7 +8,8 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
+import { discoverTrackedTeamIdentities } from "./domain/teamIdentity.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -132,6 +133,13 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
       singleSource: reconciliationPreview.filter(item => item.state === "single_source").length
     },
     reconciliationPreview: reconciliationPreview.slice(0, 20),
+    teamIdentityDiscovery: await getStoredTeamIdentityDiscovery(teamSeed.teams).then(summary => ({
+      ...summary,
+      note: summary.state === "ready"
+        ? "Discovery is derived from the latest durable provider observations. Only exact names/curated aliases observed across at least two providers are marked resolved; country, competition, and historical evidence are not inferred."
+        : "Durable identity discovery requires configured PostgreSQL observation storage. No mappings are invented when storage is unavailable.",
+      samples: summary.teams.filter(item => item.state !== "unresolved").slice(0, 20)
+    })),
     sampleCandidates: candidates.slice(0, 8).map(candidate => ({
       provider: candidate.provider, providerFixtureId: candidate.providerFixtureId, kickoffUtc: candidate.kickoffUtc,
       home: candidate.home.name, away: candidate.away.name, competition: candidate.competition.name,
@@ -169,13 +177,22 @@ app.post("/api/history/replay", async (req: Request, res: Response) => {
 });
 
 
-app.get("/api/teams/watchlist", (_req: Request, res: Response) => res.json({
-  source: teamSeed.source,
-  count: teamSeed.count,
-  mappingState: "unresolved",
-  note: teamSeed.warning,
-  teams: teamSeed.teams
-}));
+app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
+  const discovery = await getStoredTeamIdentityDiscovery(teamSeed.teams);
+  const byId = new Map(discovery.teams.map(team => [team.trackedTeamId, team]));
+  return res.json({
+    source: teamSeed.source,
+    count: teamSeed.count,
+    mappingState: discovery.state === "ready" ? "derived_from_durable_provider_observations" : discovery.state,
+    discovery: {
+      state: discovery.state, observationsLoaded: discovery.observationsLoaded,
+      resolved: discovery.resolved, ambiguous: discovery.ambiguous, unresolved: discovery.unresolved,
+      ...(discovery.errorCode ? { errorCode: discovery.errorCode } : {})
+    },
+    note: "The favourite-team list is preserved. Provider identities are derived conservatively from stored fixture observations; unresolved names are not guessed.",
+    teams: teamSeed.teams.map(team => ({ ...team, identityDiscovery: byId.get(team.id) ?? { trackedTeamId: team.id, canonicalName: team.canonicalName, state: "unresolved", identities: [], reasons: ["durable_identity_discovery_unavailable"] } }))
+  });
+});
 
 app.get("/api/fixtures", async (_req: Request, res: Response) => {
   const evidence = await getCanonicalEvidenceSummary();
@@ -196,17 +213,22 @@ app.get("/api/fixtures", async (_req: Request, res: Response) => {
 });
 
 app.get("/api/history/status", async (_req: Request, res: Response) => {
-  const evidence = await getCanonicalEvidenceSummary();
-  return res.status(evidence.state === "error" ? 503 : 200).json({
+  const [evidence, teamDiscovery] = await Promise.all([getCanonicalEvidenceSummary(), getStoredTeamIdentityDiscovery(teamSeed.teams)]);
+  return res.status(evidence.state === "error" || teamDiscovery.state === "error" ? 503 : 200).json({
     state: evidence.state === "ready" ? "canonical_evidence" : evidence.state,
     seededTeamNames: teamSeed.count,
     canonicalTeamMappings: 0,
-    teamMappingState: "not_implemented",
+    discoveredTeamIdentities: teamDiscovery.resolved,
+    teamIdentityDiscovery: {
+      state: teamDiscovery.state, observationsLoaded: teamDiscovery.observationsLoaded,
+      resolved: teamDiscovery.resolved, ambiguous: teamDiscovery.ambiguous, unresolved: teamDiscovery.unresolved
+    },
+    teamMappingState: teamDiscovery.state === "ready" ? "derived_from_durable_provider_observations_not_canonical_registry" : teamDiscovery.state,
     canonicalFixtures: evidence.corroboratedFixtureCount ?? 0,
     verifiedSettledResults: evidence.verifiedSettledResultCount ?? 0,
     conflictedFixtures: evidence.conflictedFixtureCount ?? 0,
     staleLiveFixtures: evidence.staleLiveFixtureCount ?? 0,
-    reasons: evidence.state === "ready" ? [] : [evidence.errorCode ?? "canonical_evidence_store_not_ready"]
+    reasons: [ ...(evidence.state === "ready" ? [] : [evidence.errorCode ?? "canonical_evidence_store_not_ready"]), ...(teamDiscovery.state === "ready" ? [] : [teamDiscovery.errorCode ?? "team_identity_storage_not_ready"]) ]
   });
 });
 

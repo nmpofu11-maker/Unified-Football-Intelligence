@@ -1,6 +1,7 @@
 import { Pool, type PoolClient } from "pg";
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
 import { previewCandidateReconciliation } from "../domain/reconcileCandidates.js";
+import { discoverTrackedTeamIdentities, type TrackedTeamIdentity, type TeamIdentityDiscovery } from "../domain/teamIdentity.js";
 
 export type ObservationPersistenceState = "saved" | "connected_empty" | "not_configured" | "error";
 
@@ -450,6 +451,61 @@ export async function replayStoredProviderObservations(): Promise<StoredObservat
     reconciliationDiagnostics,
     ...(canonicalEvidence.errorCode ? { errorCode: canonicalEvidence.errorCode } : {})
   };
+}
+
+export interface StoredTeamIdentityDiscoverySummary {
+  state: "ready" | "not_configured" | "error";
+  observationsLoaded: number;
+  trackedTeams: number;
+  resolved: number;
+  ambiguous: number;
+  unresolved: number;
+  teams: TeamIdentityDiscovery[];
+  errorCode?: string;
+}
+
+/**
+ * Derives team-ID discoveries from the latest durable observation for each
+ * provider fixture. This is a derived index, not a source of verified history.
+ */
+export async function getStoredTeamIdentityDiscovery(
+  trackedTeams: TrackedTeamIdentity[]
+): Promise<StoredTeamIdentityDiscoverySummary> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", observationsLoaded: 0, trackedTeams: trackedTeams.length, resolved: 0, ambiguous: 0, unresolved: trackedTeams.length, teams: [] };
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const result = await client.query<{ observation: unknown }>(`
+      SELECT DISTINCT ON (provider, provider_fixture_id) observation
+      FROM provider_fixture_observations
+      ORDER BY provider, provider_fixture_id, observed_at DESC, id DESC
+    `);
+    const candidates: ProviderFixtureCandidate[] = result.rows.flatMap(row => {
+      try {
+        const value = typeof row.observation === "string" ? JSON.parse(row.observation) : row.observation;
+        if (!value || typeof value !== "object") return [];
+        const candidate = value as ProviderFixtureCandidate;
+        if (typeof candidate.provider !== "string" || typeof candidate.providerFixtureId !== "string" ||
+            typeof candidate.home?.name !== "string" || typeof candidate.away?.name !== "string" ||
+            !Number.isFinite(Date.parse(candidate.kickoffUtc))) return [];
+        return [candidate];
+      } catch { return []; }
+    });
+    const teams = discoverTrackedTeamIdentities(trackedTeams, candidates);
+    return {
+      state: "ready", observationsLoaded: candidates.length, trackedTeams: teams.length,
+      resolved: teams.filter(team => team.state === "resolved").length,
+      ambiguous: teams.filter(team => team.state === "ambiguous").length,
+      unresolved: teams.filter(team => team.state === "unresolved").length,
+      teams
+    };
+  } catch (error) {
+    return { state: "error", observationsLoaded: 0, trackedTeams: trackedTeams.length, resolved: 0, ambiguous: 0, unresolved: trackedTeams.length, teams: [], errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
 }
 
 export interface CanonicalEvidenceSummary {
