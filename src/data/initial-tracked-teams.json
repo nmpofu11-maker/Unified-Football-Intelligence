@@ -1,646 +1,886 @@
 {
-  "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+  "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
   "count": 80,
-  "warning": "Names are preserved verbatim. Provider IDs, aliases, league mappings and history are intentionally not guessed. mappingState=unresolved until reviewed canonical identity mapping is completed.",
+  "warning": "User-supplied canonical names, countries, leagues and team-category distinctions are authoritative watchlist metadata. Provider IDs and aliases remain unresolved until independently reviewed; this list is not verified match history.",
   "teams": [
     {
-      "id": "legacy-team-001",
-      "canonicalName": "Ahlafors IF",
+      "id": "legacy-team-068",
+      "canonicalName": "St Patrick's Athletic",
+      "country": "Ireland",
+      "league": "League of Ireland Premier Division",
+      "teamCategory": "senior",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-002",
-      "canonicalName": "Almaz Antey Youth",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-003",
-      "canonicalName": "Atletico Nacional Medellin (W)",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-004",
-      "canonicalName": "Azam",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-005",
-      "canonicalName": "Baerum U19",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-006",
-      "canonicalName": "BE1 NFA",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-007",
-      "canonicalName": "Beijing Guoan",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-008",
-      "canonicalName": "Benfica U19",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-009",
-      "canonicalName": "BK Forward",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-010",
-      "canonicalName": "Bolivar",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-011",
-      "canonicalName": "Boston River Reserve",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-012",
-      "canonicalName": "Club Brugge",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-013",
-      "canonicalName": "Dinamo Zagreb",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-014",
-      "canonicalName": "Dnepr Mogilev",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-015",
-      "canonicalName": "Ekenas IF Fotbolll",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-016",
-      "canonicalName": "FC Dinamo City",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-017",
-      "canonicalName": "FC Flora Tallinn",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-018",
-      "canonicalName": "FC Gomel",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-019",
-      "canonicalName": "FC Iberia 1999 Tbilisi",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-020",
-      "canonicalName": "FC Nantes",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-021",
-      "canonicalName": "FC Noah",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-022",
-      "canonicalName": "FC Nomme United",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-023",
-      "canonicalName": "FC Pyunik",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-024",
-      "canonicalName": "FC Ulaanbaatar",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-025",
-      "canonicalName": "Fotbal Club FCSB",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-026",
-      "canonicalName": "Fram Reykjavik",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-027",
-      "canonicalName": "France U16",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-028",
-      "canonicalName": "Gnistan Helsinki",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-029",
-      "canonicalName": "Haugesund B",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-030",
-      "canonicalName": "Hunters FC",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-031",
-      "canonicalName": "Inter Milan Women",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-032",
-      "canonicalName": "Japan U16",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-033",
-      "canonicalName": "Johor Darul Ta'zim FC",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-034",
-      "canonicalName": "KF Laci",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-035",
-      "canonicalName": "Lillestrom B",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-036",
-      "canonicalName": "Linfield Women",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-037",
-      "canonicalName": "Lorenskog U19",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-038",
-      "canonicalName": "Madura United",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-039",
-      "canonicalName": "MC Oran",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-040",
-      "canonicalName": "FK Mladost DG",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-041",
-      "canonicalName": "Mohun Bagan Super Giant",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-042",
-      "canonicalName": "Napoli",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-043",
-      "canonicalName": "NEC Nijmegen",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-044",
-      "canonicalName": "MSK Zilina",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-045",
-      "canonicalName": "Nacional De Football Women",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-046",
-      "canonicalName": "Pattani",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-047",
-      "canonicalName": "Penarol Reserve",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-048",
-      "canonicalName": "Peru Women",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-049",
-      "canonicalName": "Poland Women",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-050",
-      "canonicalName": "PVF-CAND FC",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-051",
-      "canonicalName": "Qingdao Team",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-052",
-      "canonicalName": "Qviding FIF",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-053",
-      "canonicalName": "RC Sporting Charleroi",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-054",
-      "canonicalName": "Real Cartagena",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-055",
-      "canonicalName": "Riga FC",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-056",
-      "canonicalName": "Rigas Futbola Skola",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-057",
-      "canonicalName": "Rijeka",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-058",
-      "canonicalName": "Rosenborg BK Women",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-059",
-      "canonicalName": "FK Rostov Youth",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-060",
-      "canonicalName": "Saldus SS/Leevon",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-061",
-      "canonicalName": "Shanghai Port",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-062",
-      "canonicalName": "Shanghai Shenhua",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
       "id": "legacy-team-063",
       "canonicalName": "Shelbourne Women",
+      "country": "Ireland",
+      "league": "League of Ireland Women's Premier Division",
+      "teamCategory": "women",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-036",
+      "canonicalName": "Linfield Women",
+      "country": "Northern Ireland",
+      "league": "NIHL Women's Premiership",
+      "teamCategory": "women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
       "id": "legacy-team-064",
       "canonicalName": "Sligo Rovers Women",
+      "country": "Ireland",
+      "league": "League of Ireland Women's Premier Division",
+      "teamCategory": "women",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-065",
-      "canonicalName": "Slovan Ljubljana",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-066",
-      "canonicalName": "Smedby AIS",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
       "id": "legacy-team-067",
       "canonicalName": "St Johnstone F.C.",
+      "country": "Scotland",
+      "league": "Scottish Premiership",
+      "teamCategory": "senior",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
-      "id": "legacy-team-068",
-      "canonicalName": "St. Patrick's Athletic",
+      "id": "legacy-team-012",
+      "canonicalName": "Club Brugge",
+      "country": "Belgium",
+      "league": "Belgian Pro League",
+      "teamCategory": "senior",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
-      "id": "legacy-team-069",
-      "canonicalName": "Stenungsunds IF",
+      "id": "legacy-team-020",
+      "canonicalName": "FC Nantes",
+      "country": "France",
+      "league": "Ligue 1",
+      "teamCategory": "senior",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
-      "id": "legacy-team-070",
-      "canonicalName": "Tabor Sezana",
+      "id": "legacy-team-053",
+      "canonicalName": "RC Sporting Charleroi",
+      "country": "Belgium",
+      "league": "Belgian Pro League",
+      "teamCategory": "senior",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
-      "id": "legacy-team-071",
-      "canonicalName": "Tabora United FC",
+      "id": "legacy-team-008",
+      "canonicalName": "Benfica U19",
+      "country": "Portugal",
+      "league": "Campeonato Nacional Juniores U19",
+      "teamCategory": "youth",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
-      "id": "legacy-team-072",
-      "canonicalName": "Taftea IK",
+      "id": "legacy-team-001",
+      "canonicalName": "Ahlafors IF",
+      "country": "Sweden",
+      "league": "Division 2 Norra Götaland",
+      "teamCategory": "senior",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-073",
-      "canonicalName": "Truong Tuoi Dong Nai",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-074",
-      "canonicalName": "Tvaakers IF",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-075",
-      "canonicalName": "Uruguay",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-076",
-      "canonicalName": "Us Pergolettese",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
-      "mappingState": "unresolved"
-    },
-    {
-      "id": "legacy-team-077",
-      "canonicalName": "Viimsi JK",
-      "aliases": [],
-      "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
       "id": "legacy-team-078",
       "canonicalName": "Vorup FB",
+      "country": "Denmark",
+      "league": "Danmarksserien (Group 4)",
+      "teamCategory": "senior",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
-      "id": "legacy-team-079",
-      "canonicalName": "Wolfsberger AC Amateure",
+      "id": "legacy-team-029",
+      "canonicalName": "Haugesund B",
+      "country": "Norway",
+      "league": "3. Divisjon Reserve Tier",
+      "teamCategory": "reserve",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-055",
+      "canonicalName": "Riga FC",
+      "country": "Latvia",
+      "league": "Virslīga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-017",
+      "canonicalName": "FC Flora Tallinn",
+      "country": "Estonia",
+      "league": "Premium Liiga/Meistriliiga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-077",
+      "canonicalName": "Viimsi JK",
+      "country": "Estonia",
+      "league": "Esiliiga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-056",
+      "canonicalName": "Rigas Futbola Skola",
+      "country": "Latvia",
+      "league": "Virslīga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-074",
+      "canonicalName": "Tvaakers IF",
+      "country": "Sweden",
+      "league": "Ettan Södra",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-058",
+      "canonicalName": "Rosenborg BK Women",
+      "country": "Norway",
+      "league": "Toppserien",
+      "teamCategory": "women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-009",
+      "canonicalName": "BK Forward",
+      "country": "Sweden",
+      "league": "Division 2",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-066",
+      "canonicalName": "Smedby AIS",
+      "country": "Sweden",
+      "league": "Division 2",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-052",
+      "canonicalName": "Qviding FIF",
+      "country": "Sweden",
+      "league": "Division 2",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-015",
+      "canonicalName": "Ekenas IF Fotbolll",
+      "country": "Finland",
+      "league": "Veikkausliiga / Ykkösliiga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-028",
+      "canonicalName": "Gnistan Helsinki",
+      "country": "Finland",
+      "league": "Veikkausliiga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-044",
+      "canonicalName": "MSK Zilina",
+      "country": "Slovakia",
+      "league": "Slovak Niké Liga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     },
     {
       "id": "legacy-team-080",
       "canonicalName": "ZNK Agram (w)",
+      "country": "Croatia",
+      "league": "1. HNLŽ Women's First League",
+      "teamCategory": "women",
       "aliases": [],
       "providerIds": {},
-      "source": "Football-Analytical-Engine LOCKED_80_TEAMS",
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-060",
+      "canonicalName": "Saldus SS/Leevon",
+      "country": "Latvia",
+      "league": "Pirma Liga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-059",
+      "canonicalName": "FK Rostov Youth",
+      "country": "Russia",
+      "league": "Russian Youth Championship",
+      "teamCategory": "youth",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-013",
+      "canonicalName": "Dinamo Zagreb",
+      "country": "Croatia",
+      "league": "HNL",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-022",
+      "canonicalName": "FC Nomme United",
+      "country": "Estonia",
+      "league": "Premium Liiga/Meistriliiga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-019",
+      "canonicalName": "FC Iberia 1999 Tbilisi",
+      "country": "Georgia",
+      "league": "Erovnuli Liga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-057",
+      "canonicalName": "Rijeka",
+      "country": "Croatia",
+      "league": "HNL",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-049",
+      "canonicalName": "Poland Women",
+      "country": "Poland",
+      "league": "UEFA Women's International",
+      "teamCategory": "international_women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-070",
+      "canonicalName": "Tabor Sezana",
+      "country": "Slovenia",
+      "league": "2. SNL",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-018",
+      "canonicalName": "FC Gomel",
+      "country": "Belarus",
+      "league": "Belarusian Premier League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-065",
+      "canonicalName": "Slovan Ljubljana",
+      "country": "Slovenia",
+      "league": "2. SNL",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-025",
+      "canonicalName": "Fotbal Club FCSB",
+      "country": "Romania",
+      "league": "Romanian Liga I",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-040",
+      "canonicalName": "FK Mladost DG",
+      "country": "Montenegro",
+      "league": "Montenegrin First/Second League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-023",
+      "canonicalName": "FC Pyunik",
+      "country": "Armenia",
+      "league": "Armenian Premier League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-002",
+      "canonicalName": "Almaz Antey Youth",
+      "country": "Russia",
+      "league": "Russian Youth Football League (MFL)",
+      "teamCategory": "youth",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-006",
+      "canonicalName": "BE1 NFA",
+      "country": "Lithuania",
+      "league": "I Lyga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-014",
+      "canonicalName": "Dnepr Mogilev",
+      "country": "Belarus",
+      "league": "Belarusian Premier League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-079",
+      "canonicalName": "Wolfsberger AC Amateure",
+      "country": "Austria",
+      "league": "Regionalliga Mitte",
+      "teamCategory": "reserve",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-031",
+      "canonicalName": "Inter Milan Women",
+      "country": "Italy",
+      "league": "Serie A Femminile",
+      "teamCategory": "women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-042",
+      "canonicalName": "Napoli",
+      "country": "Italy",
+      "league": "Serie A",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-026",
+      "canonicalName": "Fram Reykjavik",
+      "country": "Iceland",
+      "league": "Besta deild karla",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-021",
+      "canonicalName": "FC Noah",
+      "country": "Armenia",
+      "league": "Armenian Premier League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-072",
+      "canonicalName": "Taftea IK",
+      "country": "Sweden",
+      "league": "Division 2",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-016",
+      "canonicalName": "FC Dinamo City",
+      "country": "Albania",
+      "league": "Albanian Superliga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-034",
+      "canonicalName": "KF Laci",
+      "country": "Albania",
+      "league": "Albanian Superliga",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-069",
+      "canonicalName": "Stenungsunds IF",
+      "country": "Sweden",
+      "league": "Division 2 Norra Götaland",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-010",
+      "canonicalName": "Bolivar",
+      "country": "Bolivia",
+      "league": "Bolivian Primera División",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-054",
+      "canonicalName": "Real Cartagena",
+      "country": "Colombia",
+      "league": "Categoría Primera B",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-045",
+      "canonicalName": "Nacional De Football Women",
+      "country": "Uruguay",
+      "league": "Campeonato Uruguayo Femenino",
+      "teamCategory": "women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-003",
+      "canonicalName": "Atletico Nacional Medellin (W)",
+      "country": "Colombia",
+      "league": "Liga Profesional Femenina",
+      "teamCategory": "women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-048",
+      "canonicalName": "Peru Women",
+      "country": "Peru",
+      "league": "CONMEBOL Women's International",
+      "teamCategory": "international_women",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-047",
+      "canonicalName": "Penarol Reserve",
+      "country": "Uruguay",
+      "league": "Primera División Reserve League",
+      "teamCategory": "reserve",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-075",
+      "canonicalName": "Uruguay",
+      "country": "Uruguay",
+      "league": "CONMEBOL International",
+      "teamCategory": "international",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-011",
+      "canonicalName": "Boston River Reserve",
+      "country": "Uruguay",
+      "league": "Primera División Reserve League",
+      "teamCategory": "reserve",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-027",
+      "canonicalName": "France U16",
+      "country": "France",
+      "league": "UEFA International Youth",
+      "teamCategory": "international_youth",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-038",
+      "canonicalName": "Madura United FC",
+      "country": "Indonesia",
+      "league": "Liga 1",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-032",
+      "canonicalName": "Japan U16",
+      "country": "Japan",
+      "league": "AFC International Youth",
+      "teamCategory": "international_youth",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-073",
+      "canonicalName": "Truong Tuoi Dong Nai",
+      "country": "Vietnam",
+      "league": "V.League 2",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-024",
+      "canonicalName": "FC Ulaanbaatar",
+      "country": "Mongolia",
+      "league": "Mongolian National Premier League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-051",
+      "canonicalName": "Qingdao Team",
+      "country": "China",
+      "league": "Chinese Super League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-050",
+      "canonicalName": "PVF-CAND FC",
+      "country": "Vietnam",
+      "league": "V.League 2",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-007",
+      "canonicalName": "Beijing Guoan",
+      "country": "China",
+      "league": "Chinese Super League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-041",
+      "canonicalName": "Mohun Bagan Super Giant",
+      "country": "India",
+      "league": "Indian Super League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-062",
+      "canonicalName": "Shanghai Shenhua",
+      "country": "China",
+      "league": "Chinese Super League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-061",
+      "canonicalName": "Shanghai Port",
+      "country": "China",
+      "league": "Chinese Super League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-033",
+      "canonicalName": "Johor Darul Ta'zim FC",
+      "country": "Malaysia",
+      "league": "Malaysia Super League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-030",
+      "canonicalName": "Hunters FC",
+      "country": "Mongolia",
+      "league": "Mongolian National Premier League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-046",
+      "canonicalName": "Pattani",
+      "country": "Thailand",
+      "league": "Thai League 3",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-039",
+      "canonicalName": "MC Oran",
+      "country": "Algeria",
+      "league": "Algerian Ligue Professionnelle 1",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-071",
+      "canonicalName": "Tabora United FC",
+      "country": "Tanzania",
+      "league": "Tanzanian Premier League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "legacy-team-004",
+      "canonicalName": "Azam FC",
+      "country": "Tanzania",
+      "league": "Tanzanian Premier League",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "favourite-team-076",
+      "canonicalName": "Como 1907",
+      "country": "Italy",
+      "league": "Serie A",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "favourite-team-077",
+      "canonicalName": "Nykoebing FC",
+      "country": "Denmark",
+      "league": "Danish 2nd Division",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "favourite-team-078",
+      "canonicalName": "VSK Aarhus",
+      "country": "Denmark",
+      "league": "Danish 3rd Division",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "favourite-team-079",
+      "canonicalName": "Domagnano",
+      "country": "San Marino",
+      "league": "Campionato Sammarinese",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
+      "mappingState": "unresolved"
+    },
+    {
+      "id": "favourite-team-080",
+      "canonicalName": "SP Tre Penne",
+      "country": "San Marino",
+      "league": "Campionato Sammarinese",
+      "teamCategory": "senior",
+      "aliases": [],
+      "providerIds": {},
+      "source": "USER_CONFIRMED_AUTHORITATIVE_FAVOURITE_WATCHLIST_2026-10-16",
       "mappingState": "unresolved"
     }
   ]
