@@ -345,11 +345,12 @@ app.post("/api/teams/provider-search/reconcile", async (req: Request, res: Respo
   // Reconcile the latest saved searches only. This endpoint intentionally makes no
   // calls to provider APIs, so it can safely migrate/re-evaluate existing discoveries.
   const identityMapping = await reconcileStoredTeamSearchCandidates(teamSeed.teams);
-  return res.status(identityMapping.state === "saved" ? 200 : 503).json({
-    state: identityMapping.state === "saved"
+  const { state: reconciliationState, ...mappingDetails } = identityMapping;
+  return res.status(reconciliationState === "saved" ? 200 : 503).json({
+    state: reconciliationState === "saved"
       ? "saved_team_searches_reconciled"
-      : identityMapping.state,
-    ...identityMapping,
+      : reconciliationState,
+    ...mappingDetails,
     providerRequestsMade: 0,
     note: "Reconciles the latest persisted provider-search observations for all favourite teams. It does not make provider API calls, invent missing identities, or mark a one-provider candidate as cross-provider confirmed."
   });
