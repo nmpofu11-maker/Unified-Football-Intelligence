@@ -1,6 +1,6 @@
 # Delivery status — 2026-10-16
 
-## Implemented and CI-verified on `feature/canonical-evidence-pipeline`
+## Implemented and CI-verified on `main`
 
 - Canonical domain contracts, validation and conflict-aware reconciliation.
 - SportAPI.ai, Sportmonks and API-Football fixture adapters with explicit diagnostics.
@@ -17,7 +17,7 @@
 
 ## CI verification
 
-The latest completed checks on this feature line passed:
+The complete integration was merged to `main` as commit `5e62cf9193da59b38fbfd57805a220c1347baa35`. GitHub Actions passed on that exact commit. The latest completed checks passed:
 - `npm run typecheck`
 - `npm test`
 - `npm run build`
@@ -26,11 +26,11 @@ These are GitHub Actions checks on source revisions, not a live deployment or pr
 
 ## Still not verified
 
-- No live deployment of the latest feature branch has been performed.
+- No live deployment of the latest `main` revision has been performed.
 - No live API-Football or Sportmonks team search has been run here; provider credentials and the deployed service environment are not accessible through this code-edit workflow.
 - PostgreSQL connectivity and persistence/restart durability must be verified on the actual target deployment.
 - Search candidates and strict identity mappings do not constitute historical match results. Backfill, verified settled-result ingestion, team/competition-season completeness, immutable prediction ledger, chronological backtesting and calibration remain outstanding.
-- The dashboard control and local runner require the updated server to be deployed, PostgreSQL ready, provider keys configured server-side, and `PROVIDER_DIAGNOSTICS_TOKEN` configured.
+- The dashboard control and local runner require the updated `main` revision to be deployed, PostgreSQL ready, provider keys configured server-side, and `PROVIDER_DIAGNOSTICS_TOKEN` configured.
 
 ## Go/no-go
 
