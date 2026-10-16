@@ -109,7 +109,7 @@ export function discoverTrackedTeamIdentities(
     return {
       trackedTeamId: tracked.id,
       canonicalName: tracked.canonicalName,
-      state: ambiguous ? "ambiguous" : identities.length ? "resolved" : "unresolved",
+      state: ambiguous ? "ambiguous" : identities.length >= 2 ? "resolved" : "unresolved",
       identities: identities.sort((a, b) => a.provider.localeCompare(b.provider)),
       reasons: [...reasons].sort()
     };
