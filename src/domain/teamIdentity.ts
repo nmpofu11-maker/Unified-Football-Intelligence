@@ -152,7 +152,8 @@ export function reconcileTeamSearchIdentity(
     reasons.add("multiple_exact_candidates_within_provider");
     return { trackedTeamId: tracked.id, canonicalName: tracked.canonicalName, state: "ambiguous", identities: [], reasons: [...reasons] };
   }
-  const [api, sportmonks] = providers;
+  const api = providers[0]!;
+  const sportmonks = providers[1]!;
   if (api.candidates.length !== 1 || sportmonks.candidates.length !== 1) {
     reasons.add("requires_one_exact_candidate_from_each_provider");
     if (api.candidates.length === 0 && sportmonks.candidates.length === 0) reasons.add("no_exact_or_curated_alias_search_candidate");
