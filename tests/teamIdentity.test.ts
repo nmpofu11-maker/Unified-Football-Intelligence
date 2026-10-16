@@ -117,3 +117,63 @@ test("preserves a unique exact candidate from one provider without falsely confi
   }]);
   assert.ok(resolution.reasons.includes("single_provider_identity_preserved_not_cross_provider_confirmed"));
 });
+
+
+test("uses the senior Club Brugge KV alias without merging youth, reserve, or women squads", () => {
+  const results: TeamSearchProviderResult[] = [
+    {
+      provider: "api-football",
+      state: "success",
+      candidates: [
+        { provider: "api-football", providerTeamId: "10845", name: "Club Brugge U21", country: "Belgium" },
+        { provider: "api-football", providerTeamId: "14130", name: "Club Brugge II", country: "Belgium" },
+        { provider: "api-football", providerTeamId: "569", name: "Club Brugge KV", country: "Belgium" },
+        { provider: "api-football", providerTeamId: "6344", name: "Club Brugge W", country: "Belgium" },
+        { provider: "api-football", providerTeamId: "7893", name: "Club Brugge U19", country: "Belgium" }
+      ]
+    },
+    { provider: "sportmonks", state: "success_empty", candidates: [] }
+  ];
+  const resolution = reconcileTeamSearchIdentity({
+    id: "team-club-brugge",
+    canonicalName: "Club Brugge",
+    country: "Belgium",
+    league: "Belgian Pro League",
+    teamCategory: "senior"
+  }, results);
+  assert.equal(resolution.state, "unresolved");
+  assert.deepEqual(resolution.identities, [{
+    provider: "api-football",
+    providerTeamId: "569",
+    providerName: "Club Brugge KV",
+    country: "Belgium"
+  }]);
+});
+
+test("rejects an exact-name search candidate when its country conflicts with the trusted watchlist", () => {
+  const results: TeamSearchProviderResult[] = [
+    {
+      provider: "api-football",
+      state: "success",
+      candidates: [{ provider: "api-football", providerTeamId: "999", name: "Nantes", country: "United States" }]
+    },
+    {
+      provider: "sportmonks",
+      state: "success",
+      candidates: [{ provider: "sportmonks", providerTeamId: "202", name: "Nantes", country: "France" }]
+    }
+  ];
+  const resolution = reconcileTeamSearchIdentity({
+    id: "team-fc-nantes",
+    canonicalName: "FC Nantes",
+    country: "France",
+    teamCategory: "senior"
+  }, results);
+  assert.equal(resolution.state, "unresolved");
+  assert.deepEqual(resolution.identities, [{
+    provider: "sportmonks",
+    providerTeamId: "202",
+    providerName: "Nantes",
+    country: "France"
+  }]);
+});
