@@ -188,9 +188,9 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
     return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
   }
   const now = Date.now();
-  const ip = req.ip || "unknown";
+  const ip = `team-search:${req.ip || "unknown"}`;
   const recent = (requestWindows.get(ip) ?? []).filter(t => now - t < 60_000);
-  if (recent.length >= 6) return res.status(429).json({ state: "rate_limited", reason: "provider_check_limit_6_per_minute" });
+  if (recent.length >= 2) return res.status(429).json({ state: "rate_limited", reason: "team_search_limit_2_per_minute" });
   recent.push(now);
   requestWindows.set(ip, recent);
 
@@ -247,9 +247,9 @@ app.post("/api/teams/provider-search/next-batch", async (req: Request, res: Resp
     return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
   }
   const now = Date.now();
-  const ip = req.ip || "unknown";
+  const ip = `team-search:${req.ip || "unknown"}`;
   const recent = (requestWindows.get(ip) ?? []).filter(t => now - t < 60_000);
-  if (recent.length >= 6) return res.status(429).json({ state: "rate_limited", reason: "provider_check_limit_6_per_minute" });
+  if (recent.length >= 2) return res.status(429).json({ state: "rate_limited", reason: "team_search_limit_2_per_minute" });
   recent.push(now);
   requestWindows.set(ip, recent);
 
@@ -264,8 +264,13 @@ app.post("/api/teams/provider-search/next-batch", async (req: Request, res: Resp
       provider.state === "request_error" || provider.state === "rate_limited" ||
       (provider.state === "http_error" && provider.errorCode?.startsWith("http_5"))
     );
-  const dueIds = new Set(before.teams.filter(isRetryable).map(team => team.trackedTeamId));
-  const trackedTeams = teamSeed.teams.filter(team => dueIds.has(team.id)).slice(0, 5);
+  const neverSearchedIds = new Set(before.teams.filter(team => team.state === "never_searched").map(team => team.trackedTeamId));
+  const retryableIds = new Set(before.teams.filter(team => team.state !== "never_searched" && isRetryable(team)).map(team => team.trackedTeamId));
+  const orderedDueIds = new Set([
+    ...teamSeed.teams.filter(team => neverSearchedIds.has(team.id)).map(team => team.id),
+    ...teamSeed.teams.filter(team => retryableIds.has(team.id)).map(team => team.id)
+  ]);
+  const trackedTeams = teamSeed.teams.filter(team => orderedDueIds.has(team.id)).slice(0, 5);
   if (!trackedTeams.length) {
     return res.json({
       state: "team_search_batches_complete",
