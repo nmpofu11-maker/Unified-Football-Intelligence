@@ -101,3 +101,19 @@ test("does not merge youth/reserve/women variants by stripping suffixes", () => 
   ];
   assert.equal(reconcileTeamSearchIdentity({ id: "team-1", canonicalName: "Benfica U19" }, results).state, "unresolved");
 });
+
+test("preserves a unique exact candidate from one provider without falsely confirming cross-provider identity", () => {
+  const results: TeamSearchProviderResult[] = [
+    { provider: "api-football", state: "success", candidates: [{ provider: "api-football", providerTeamId: "7888", name: "Benfica U19", country: "Portugal" }] },
+    { provider: "sportmonks", state: "success_empty", candidates: [] }
+  ];
+  const resolution = reconcileTeamSearchIdentity({ id: "team-benfica-u19", canonicalName: "Benfica U19" }, results);
+  assert.equal(resolution.state, "unresolved");
+  assert.deepEqual(resolution.identities, [{
+    provider: "api-football",
+    providerTeamId: "7888",
+    providerName: "Benfica U19",
+    country: "Portugal"
+  }]);
+  assert.ok(resolution.reasons.includes("single_provider_identity_preserved_not_cross_provider_confirmed"));
+});
