@@ -112,7 +112,7 @@ async function requestSearch(
       const errorCode = providerErrorCode(payload);
       const state: TeamSearchProviderResult["state"] =
         errorCode === "provider_rate_limited" ? "rate_limited" :
-        errorCode === "provider_auth_error" ? "auth_error" : "schema_error";
+        errorCode === "provider_auth_error" ? "auth_error" : "http_error";
       return { provider, state, candidates: [], errorCode };
     }
     const candidates = parse(payload);
