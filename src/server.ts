@@ -257,7 +257,7 @@ app.post("/api/teams/provider-search/next-batch", async (req: Request, res: Resp
   if (before.state !== "ready") {
     return res.status(503).json({ state: before.state, reason: before.errorCode ?? "durable_team_search_storage_required" });
   }
-  const isRetryable = (team: typeof before.teams[number]) =>
+  const isRetryable = (team: (typeof before.teams)[number]) =>
     team.state === "never_searched" ||
     team.providers.length < 2 ||
     team.providers.some(provider =>
