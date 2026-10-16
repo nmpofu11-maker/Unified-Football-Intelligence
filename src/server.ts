@@ -237,6 +237,69 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
     note: "Search results are stored as discovery observations. A mapping is confirmed only when one exact/curated-name candidate from each provider has matching country metadata. Ambiguous or incomplete cases remain unconfirmed. Search at most five favourite teams per request to protect provider quotas."
   });
 });
+app.post("/api/teams/provider-search/next-batch", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+  const now = Date.now();
+  const ip = req.ip || "unknown";
+  const recent = (requestWindows.get(ip) ?? []).filter(t => now - t < 60_000);
+  if (recent.length >= 6) return res.status(429).json({ state: "rate_limited", reason: "provider_check_limit_6_per_minute" });
+  recent.push(now);
+  requestWindows.set(ip, recent);
+
+  const before = await getStoredTeamSearchReview(teamSeed.teams);
+  if (before.state !== "ready") {
+    return res.status(503).json({ state: before.state, reason: before.errorCode ?? "durable_team_search_storage_required" });
+  }
+  const isRetryable = (team: typeof before.teams[number]) =>
+    team.state === "never_searched" ||
+    team.providers.length < 2 ||
+    team.providers.some(provider =>
+      provider.state === "request_error" || provider.state === "rate_limited" ||
+      (provider.state === "http_error" && provider.errorCode?.startsWith("http_5"))
+    );
+  const dueIds = new Set(before.teams.filter(isRetryable).map(team => team.trackedTeamId));
+  const trackedTeams = teamSeed.teams.filter(team => dueIds.has(team.id)).slice(0, 5);
+  if (!trackedTeams.length) {
+    return res.json({
+      state: "team_search_batches_complete",
+      progress: { trackedTeams: before.trackedTeams, searchedTeams: before.searchedTeams, candidateCount: before.candidateCount },
+      retryableTeamsRemaining: 0,
+      note: "Every favourite team has a persisted result from both providers or no safe automatic retry remains. Unresolved names require better provider coverage or additional verified context."
+    });
+  }
+  const results = await Promise.all(trackedTeams.map(async team => ({
+    trackedTeamId: team.id,
+    canonicalName: team.canonicalName,
+    state: "discovery_only" as const,
+    providers: await searchTeamAcrossProviders(team.canonicalName)
+  })));
+  const persistence = await persistTeamSearchObservations(results);
+  const identityMapping = persistence.state === "saved"
+    ? await reconcileStoredTeamSearchCandidates(trackedTeams)
+    : { state: persistence.state === "error" ? "error" as const : "not_configured" as const, trackedTeams: trackedTeams.length, confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, skippedIncompleteSearch: trackedTeams.length, mappings: [] };
+  const after = await getStoredTeamSearchReview(teamSeed.teams);
+  const remaining = after.state === "ready" ? after.teams.filter(isRetryable).length : null;
+  return res.json({
+    state: "provider_team_search_batch_completed",
+    processed: trackedTeams.map(team => ({ id: team.id, name: team.canonicalName })),
+    progress: after.state === "ready"
+      ? { trackedTeams: after.trackedTeams, searchedTeams: after.searchedTeams, candidateCount: after.candidateCount }
+      : { trackedTeams: teamSeed.teams.length, searchedTeams: null, candidateCount: null },
+    retryableTeamsRemaining: remaining,
+    persistence,
+    identityMapping,
+    nextAction: remaining && remaining > 0 ? "Call POST /api/teams/provider-search/next-batch again after respecting provider quotas." : "Review /api/teams/watchlist and /api/teams/provider-search/results.",
+    note: "Processes at most five favourite teams per request. Exact/country-corroborated identities may be confirmed; ambiguous or insufficiently supported identities remain unresolved. No historical results are inferred."
+  });
+});
+
 app.get("/api/teams/provider-search/results", async (req: Request, res: Response) => {
   const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
   const providedToken = req.get("x-provider-diagnostics-token") ?? "";
