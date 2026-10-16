@@ -234,7 +234,7 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
     nextBatch: batchRaw && Number(batchRaw) + 1 < Math.ceil(teamSeed.teams.length / 5) ? Number(batchRaw) + 1 : null,
     persistence,
     results,
-    note: "Provider search results are candidates only. They do not write or approve canonical mappings. Review name, country, gender/category and competition context before any identity is accepted. Search at most three favourite teams per request to protect provider quotas."
+    note: "Search results are stored as discovery observations. A mapping is confirmed only when one exact/curated-name candidate from each provider has matching country metadata. Ambiguous or incomplete cases remain unconfirmed. Search at most five favourite teams per request to protect provider quotas."
   });
 });
 app.get("/api/teams/provider-search/results", async (req: Request, res: Response) => {
@@ -278,6 +278,14 @@ app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
       searchedTeams: searchReview.searchedTeams,
       candidateCount: searchReview.candidateCount,
       note: "Provider search candidates are suggestions only; they are not approved mappings."
+    },
+    canonicalMappingSummary: {
+      state: identityMappings.state,
+      confirmed: identityMappings.confirmed,
+      ambiguous: identityMappings.ambiguous,
+      unresolved: identityMappings.unresolved,
+      ...(identityMappings.errorCode ? { errorCode: identityMappings.errorCode } : {}),
+      note: "A mapping is confirmed only when unique exact/curated-name candidates from both providers agree on country. This is identity evidence, not verified historical results."
     },
     teams: teamSeed.teams.map(team => ({
       ...team,
