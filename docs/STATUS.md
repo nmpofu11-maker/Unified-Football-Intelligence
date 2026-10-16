@@ -11,7 +11,8 @@
 - A separate persistent team identity mapping table. A mapping is confirmed only when each of API-Football and Sportmonks returns one exact/curated-name candidate and both country values agree. Multiple exact candidates become ambiguous; missing country or insufficient coverage remains unresolved.
 - Watchlist response includes search candidates, discovery progress and canonical mapping state.
 - Protected next-batch endpoint processes up to five unsearched/retryable teams, with two team-search requests per minute per client and never-searched teams prioritized before retries.
-- A paced local runner, `npm run discover:favourite-teams`, and README setup instructions for processing batches without manually supplying IDs.
+- A paced local runner, `npm run discover:favourite-teams`, plus a dashboard **Discover favourite teams** control with visible progress and rate-limit pacing. Neither requires manually supplying provider IDs.
+- A live verification runbook at `docs/LIVE_VERIFICATION_RUNBOOK.md` covering server secrets, PostgreSQL readiness, discovery execution, persistence/restart checks and safe interpretation of unresolved mappings.
 - Betting recommendations remain disabled pending verified historical evidence, model calibration, fresh odds and risk gates.
 
 ## CI verification
@@ -29,7 +30,7 @@ These are GitHub Actions checks on source revisions, not a live deployment or pr
 - No live API-Football or Sportmonks team search has been run here; provider credentials and the deployed service environment are not accessible through this code-edit workflow.
 - PostgreSQL connectivity and persistence/restart durability must be verified on the actual target deployment.
 - Search candidates and strict identity mappings do not constitute historical match results. Backfill, verified settled-result ingestion, team/competition-season completeness, immutable prediction ledger, chronological backtesting and calibration remain outstanding.
-- The runner requires the updated server to be deployed, PostgreSQL ready, provider keys configured server-side, and `PROVIDER_DIAGNOSTICS_TOKEN` configured.
+- The dashboard control and local runner require the updated server to be deployed, PostgreSQL ready, provider keys configured server-side, and `PROVIDER_DIAGNOSTICS_TOKEN` configured.
 
 ## Go/no-go
 
