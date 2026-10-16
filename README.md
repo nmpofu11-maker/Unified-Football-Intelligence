@@ -33,10 +33,17 @@ Monitor broadly, build deeper verified histories for the original 80 priority te
 
 ## Favourite-team identity discovery
 
-After the updated server is deployed with PostgreSQL configured and both API-Football and Sportmonks credentials available, run the paced discovery runner from a trusted machine:
+After the updated server is deployed with PostgreSQL configured and both API-Football and Sportmonks credentials available, set these variables in your local, git-ignored `.env` file (do not commit it):
+
+```dotenv
+FOOTBALL_APP_URL=https://your-deployed-app.example
+PROVIDER_DIAGNOSTICS_TOKEN=your-configured-token
+```
+
+Then run the paced discovery runner from a trusted machine:
 
 ```bash
-FOOTBALL_APP_URL="https://your-deployed-app.example" PROVIDER_DIAGNOSTICS_TOKEN="your-configured-token" npm run discover:favourite-teams
+npm run discover:favourite-teams
 ```
 
 The runner processes up to five teams per request, waits between requests to respect the team-search rate limit, and stores provider candidates plus conservative cross-provider identity decisions. It does not print the token. It stops at the configured maximum of 32 batches; set `TEAM_SEARCH_MAX_BATCHES` to a lower value if you want a shorter run.
