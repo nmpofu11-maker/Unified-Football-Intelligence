@@ -67,10 +67,11 @@ async function requestSearch(
   url: URL,
   headers: Record<string, string>,
   parse: (payload: unknown) => TeamSearchCandidate[] | null,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  fetchImpl: typeof fetch = fetch
 ): Promise<TeamSearchProviderResult> {
   try {
-    const response = await fetch(url, { headers: { Accept: "application/json", ...headers }, signal: signal ?? AbortSignal.timeout(12_000) });
+    const response = await fetchImpl(url, { headers: { Accept: "application/json", ...headers }, signal: signal ?? AbortSignal.timeout(12_000) });
     if (!response.ok) return { provider, state: stateForStatus(response.status), candidates: [], errorCode: `http_${response.status}` };
     let payload: unknown;
     try { payload = await response.json(); } catch { return { provider, state: "schema_error", candidates: [], errorCode: "invalid_json" }; }
@@ -94,7 +95,11 @@ async function requestSearch(
 }
 
 /** Searches provider-native team catalogues. Results are discovery candidates only, never reviewed mappings. */
-export async function searchTeamAcrossProviders(teamName: string, signal?: AbortSignal): Promise<TeamSearchProviderResult[]> {
+export async function searchTeamAcrossProviders(
+  teamName: string,
+  signal?: AbortSignal,
+  fetchImpl: typeof fetch = fetch
+): Promise<TeamSearchProviderResult[]> {
   const query = teamName.trim();
   if (!query || query.length > 120) {
     return [
@@ -110,7 +115,7 @@ export async function searchTeamAcrossProviders(teamName: string, signal?: Abort
     ? (() => {
         const url = new URL(`${apiBase}/teams`);
         url.searchParams.set("search", query);
-        return requestSearch("api-football", url, { "x-apisports-key": apiKey }, candidatesFromApiFootball, signal);
+        return requestSearch("api-football", url, { "x-apisports-key": apiKey }, candidatesFromApiFootball, signal, fetchImpl);
       })()
     : Promise.resolve<TeamSearchProviderResult>({ provider: "api-football", state: "unavailable", candidates: [], errorCode: "credential_not_configured" });
   const sportmonksResult = sportmonksKey
@@ -119,7 +124,7 @@ export async function searchTeamAcrossProviders(teamName: string, signal?: Abort
         url.searchParams.set("include", "country");
         url.searchParams.set("per_page", "50");
         url.searchParams.set("page", "1");
-        return requestSearch("sportmonks", url, { Authorization: sportmonksKey }, candidatesFromSportmonks, signal);
+        return requestSearch("sportmonks", url, { Authorization: sportmonksKey }, candidatesFromSportmonks, signal, fetchImpl);
       })()
     : Promise.resolve<TeamSearchProviderResult>({ provider: "sportmonks", state: "unavailable", candidates: [], errorCode: "credential_not_configured" });
   return Promise.all([apiResult, sportmonksResult]);
