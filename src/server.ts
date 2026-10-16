@@ -8,6 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
+import { discoverTrackedTeamIdentities } from "./domain/teamIdentity.js";
 import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, persistCanonicalEvidence, persistProviderObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
@@ -132,6 +133,17 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
       singleSource: reconciliationPreview.filter(item => item.state === "single_source").length
     },
     reconciliationPreview: reconciliationPreview.slice(0, 20),
+    teamIdentityDiscovery: (() => {
+      const discovery = discoverTrackedTeamIdentities(teamSeed.teams, candidates);
+      return {
+        trackedTeams: discovery.length,
+        resolved: discovery.filter(item => item.state === "resolved").length,
+        ambiguous: discovery.filter(item => item.state === "ambiguous").length,
+        unresolved: discovery.filter(item => item.state === "unresolved").length,
+        note: "Discovery uses exact normalized names and curated aliases from this provider check only. It does not guess country/competition, persist mappings, or promote history to verified evidence.",
+        samples: discovery.filter(item => item.state !== "unresolved").slice(0, 20)
+      };
+    })(),
     sampleCandidates: candidates.slice(0, 8).map(candidate => ({
       provider: candidate.provider, providerFixtureId: candidate.providerFixtureId, kickoffUtc: candidate.kickoffUtc,
       home: candidate.home.name, away: candidate.away.name, competition: candidate.competition.name,
