@@ -10,7 +10,7 @@ import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
 import { discoverTrackedTeamIdentities } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -196,12 +196,25 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
 
   const rawIds = String(req.query?.teamIds ?? "");
   const ids = [...new Set(rawIds.split(",").map(value => value.trim()).filter(Boolean))];
-  if (!ids.length || ids.length > 3) {
-    return res.status(400).json({ state: "invalid_request", reason: "provide_one_to_three_teamIds" });
+  const batchRaw = req.query?.batch == null ? "" : String(req.query.batch);
+  let trackedTeams: typeof teamSeed.teams;
+  if (ids.length && batchRaw) {
+    return res.status(400).json({ state: "invalid_request", reason: "use_teamIds_or_batch_not_both" });
   }
-  const trackedTeams = teamSeed.teams.filter(team => ids.includes(team.id));
-  if (trackedTeams.length !== ids.length) {
-    return res.status(400).json({ state: "invalid_request", reason: "unknown_team_id", acceptedTeamIds: trackedTeams.map(team => team.id) });
+  if (ids.length) {
+    if (ids.length > 5) return res.status(400).json({ state: "invalid_request", reason: "maximum_five_teamIds_per_request" });
+    trackedTeams = teamSeed.teams.filter(team => ids.includes(team.id));
+    if (trackedTeams.length !== ids.length) {
+      return res.status(400).json({ state: "invalid_request", reason: "unknown_team_id", acceptedTeamIds: trackedTeams.map(team => team.id) });
+    }
+  } else {
+    if (!/^(0|[1-9]\\d*)$/.test(batchRaw)) return res.status(400).json({ state: "invalid_request", reason: "provide_teamIds_or_batch_index_starting_at_zero" });
+    const batch = Number(batchRaw);
+    const batchCount = Math.ceil(teamSeed.teams.length / 5);
+    if (!Number.isSafeInteger(batch) || batch >= batchCount) {
+      return res.status(400).json({ state: "invalid_request", reason: "batch_out_of_range", batchCount, validBatchRange: [0, batchCount - 1] });
+    }
+    trackedTeams = teamSeed.teams.slice(batch * 5, batch * 5 + 5);
   }
   const results = await Promise.all(trackedTeams.map(async team => ({
     trackedTeamId: team.id,
@@ -213,11 +226,29 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
   return res.json({
     state: "provider_team_search_completed",
     resultCount: results.length,
+    batch: batchRaw ? Number(batchRaw) : null,
+    nextBatch: batchRaw && Number(batchRaw) + 1 < Math.ceil(teamSeed.teams.length / 5) ? Number(batchRaw) + 1 : null,
     persistence,
     results,
     note: "Provider search results are candidates only. They do not write or approve canonical mappings. Review name, country, gender/category and competition context before any identity is accepted. Search at most three favourite teams per request to protect provider quotas."
   });
 });
+app.get("/api/teams/provider-search/results", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+  const summary = await getStoredTeamSearchReview(teamSeed.teams);
+  return res.status(summary.state === "error" ? 503 : 200).json({
+    ...summary,
+    note: "Saved provider search candidates are for identity review only. They are not canonical mappings and do not establish verified historical evidence."
+  });
+});
+
 
 app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
   const discovery = await getStoredTeamIdentityDiscovery(teamSeed.teams);
