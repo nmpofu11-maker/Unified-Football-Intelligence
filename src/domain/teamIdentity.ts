@@ -154,10 +154,31 @@ export function reconcileTeamSearchIdentity(
   }
   const api = providers[0]!;
   const sportmonks = providers[1]!;
+  // Keep a unique exact identity from an individual provider even when the other
+  // catalogue has no result. This is still an unresolved cross-provider mapping:
+  // preserving the candidate must never be mistaken for corroboration.
   if (api.candidates.length !== 1 || sportmonks.candidates.length !== 1) {
     reasons.add("requires_one_exact_candidate_from_each_provider");
     if (api.candidates.length === 0 && sportmonks.candidates.length === 0) reasons.add("no_exact_or_curated_alias_search_candidate");
-    return { trackedTeamId: tracked.id, canonicalName: tracked.canonicalName, state: "unresolved", identities: [], reasons: [...reasons] };
+    for (const item of providers) {
+      const candidate = item.candidates[0];
+      if (candidate?.country?.trim()) {
+        identities.push({
+          provider: item.provider,
+          providerTeamId: candidate.providerTeamId,
+          providerName: candidate.name,
+          country: candidate.country
+        });
+      }
+    }
+    if (identities.length) reasons.add("single_provider_identity_preserved_not_cross_provider_confirmed");
+    return {
+      trackedTeamId: tracked.id,
+      canonicalName: tracked.canonicalName,
+      state: "unresolved",
+      identities,
+      reasons: [...reasons]
+    };
   }
   const apiCandidate = api.candidates[0]!;
   const sportmonksCandidate = sportmonks.candidates[0]!;
