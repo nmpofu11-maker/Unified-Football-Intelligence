@@ -31,13 +31,18 @@ function candidatesFromApiFootball(payload: unknown): TeamSearchCandidate[] | nu
     const row = object(value);
     const team = object(row?.team);
     if (team?.id == null || !clean(team.name)) continue;
+    const name = clean(team.name);
+    const countryName = clean(team.country);
+    const gender = clean(team.gender);
+    const shortCode = clean(team.code);
+    if (!name) continue;
     rows.push({
       provider: "api-football",
       providerTeamId: String(team.id),
-      name: clean(team.name)!,
-      ...(clean(team.country) ? { country: clean(team.country) } : {}),
-      ...(clean(team.gender) ? { gender: clean(team.gender) } : {}),
-      ...(clean(team.code) ? { shortCode: clean(team.code) } : {})
+      name,
+      ...(countryName ? { country: countryName } : {}),
+      ...(gender ? { gender } : {}),
+      ...(shortCode ? { shortCode } : {})
     });
   }
   return rows;
@@ -50,14 +55,20 @@ function candidatesFromSportmonks(payload: unknown): TeamSearchCandidate[] | nul
     const team = object(value);
     if (team?.id == null || !clean(team.name)) continue;
     const country = object(team.country);
+    const name = clean(team.name);
+    const countryName = clean(country?.name);
+    const gender = clean(team.gender);
+    const teamType = clean(team.type);
+    const shortCode = clean(team.short_code);
+    if (!name) continue;
     rows.push({
       provider: "sportmonks",
       providerTeamId: String(team.id),
-      name: clean(team.name)!,
-      ...(clean(country?.name) ? { country: clean(country?.name) } : {}),
-      ...(clean(team.gender) ? { gender: clean(team.gender) } : {}),
-      ...(clean(team.type) ? { teamType: clean(team.type) } : {}),
-      ...(clean(team.short_code) ? { shortCode: clean(team.short_code) } : {})
+      name,
+      ...(countryName ? { country: countryName } : {}),
+      ...(gender ? { gender } : {}),
+      ...(teamType ? { teamType } : {}),
+      ...(shortCode ? { shortCode } : {})
     });
   }
   return rows;
