@@ -213,7 +213,7 @@ app.get("/api/history/status", async (_req: Request, res: Response) => {
     state: evidence.state === "ready" ? "canonical_evidence" : evidence.state,
     seededTeamNames: teamSeed.count,
     canonicalTeamMappings: 0,
-    teamMappingState: "not_implemented",
+    teamMappingState: "discovery_on_provider_check_not_persisted",
     canonicalFixtures: evidence.corroboratedFixtureCount ?? 0,
     verifiedSettledResults: evidence.verifiedSettledResultCount ?? 0,
     conflictedFixtures: evidence.conflictedFixtureCount ?? 0,
