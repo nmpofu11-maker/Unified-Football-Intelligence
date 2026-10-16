@@ -4,7 +4,7 @@
   "warning": "User-supplied canonical names, countries, leagues and team-category distinctions are authoritative watchlist metadata. Provider IDs and aliases remain unresolved until independently reviewed; this list is not verified match history.",
   "teams": [
     {
-      "id": "favourite-team-001",
+      "id": "legacy-team-068",
       "canonicalName": "St Patrick's Athletic",
       "country": "Ireland",
       "league": "League of Ireland Premier Division",
@@ -15,7 +15,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-002",
+      "id": "legacy-team-063",
       "canonicalName": "Shelbourne Women",
       "country": "Ireland",
       "league": "League of Ireland Women's Premier Division",
@@ -26,7 +26,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-003",
+      "id": "legacy-team-036",
       "canonicalName": "Linfield Women",
       "country": "Northern Ireland",
       "league": "NIHL Women's Premiership",
@@ -37,7 +37,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-004",
+      "id": "legacy-team-064",
       "canonicalName": "Sligo Rovers Women",
       "country": "Ireland",
       "league": "League of Ireland Women's Premier Division",
@@ -48,7 +48,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-005",
+      "id": "legacy-team-067",
       "canonicalName": "St Johnstone F.C.",
       "country": "Scotland",
       "league": "Scottish Premiership",
@@ -59,7 +59,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-006",
+      "id": "legacy-team-012",
       "canonicalName": "Club Brugge",
       "country": "Belgium",
       "league": "Belgian Pro League",
@@ -70,7 +70,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-007",
+      "id": "legacy-team-020",
       "canonicalName": "FC Nantes",
       "country": "France",
       "league": "Ligue 1",
@@ -81,7 +81,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-008",
+      "id": "legacy-team-053",
       "canonicalName": "RC Sporting Charleroi",
       "country": "Belgium",
       "league": "Belgian Pro League",
@@ -92,7 +92,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-009",
+      "id": "legacy-team-008",
       "canonicalName": "Benfica U19",
       "country": "Portugal",
       "league": "Campeonato Nacional Juniores U19",
@@ -103,7 +103,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-010",
+      "id": "legacy-team-001",
       "canonicalName": "Ahlafors IF",
       "country": "Sweden",
       "league": "Division 2 Norra Götaland",
@@ -114,7 +114,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-011",
+      "id": "legacy-team-078",
       "canonicalName": "Vorup FB",
       "country": "Denmark",
       "league": "Danmarksserien (Group 4)",
@@ -125,7 +125,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-012",
+      "id": "legacy-team-029",
       "canonicalName": "Haugesund B",
       "country": "Norway",
       "league": "3. Divisjon Reserve Tier",
@@ -136,7 +136,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-013",
+      "id": "legacy-team-055",
       "canonicalName": "Riga FC",
       "country": "Latvia",
       "league": "Virslīga",
@@ -147,7 +147,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-014",
+      "id": "legacy-team-017",
       "canonicalName": "FC Flora Tallinn",
       "country": "Estonia",
       "league": "Premium Liiga/Meistriliiga",
@@ -158,7 +158,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-015",
+      "id": "legacy-team-077",
       "canonicalName": "Viimsi JK",
       "country": "Estonia",
       "league": "Esiliiga",
@@ -169,7 +169,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-016",
+      "id": "legacy-team-056",
       "canonicalName": "Rigas Futbola Skola",
       "country": "Latvia",
       "league": "Virslīga",
@@ -180,7 +180,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-017",
+      "id": "legacy-team-074",
       "canonicalName": "Tvaakers IF",
       "country": "Sweden",
       "league": "Ettan Södra",
@@ -191,7 +191,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-018",
+      "id": "legacy-team-058",
       "canonicalName": "Rosenborg BK Women",
       "country": "Norway",
       "league": "Toppserien",
@@ -202,7 +202,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-019",
+      "id": "legacy-team-009",
       "canonicalName": "BK Forward",
       "country": "Sweden",
       "league": "Division 2",
@@ -213,7 +213,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-020",
+      "id": "legacy-team-066",
       "canonicalName": "Smedby AIS",
       "country": "Sweden",
       "league": "Division 2",
@@ -224,7 +224,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-021",
+      "id": "legacy-team-052",
       "canonicalName": "Qviding FIF",
       "country": "Sweden",
       "league": "Division 2",
@@ -235,7 +235,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-022",
+      "id": "legacy-team-015",
       "canonicalName": "Ekenas IF Fotbolll",
       "country": "Finland",
       "league": "Veikkausliiga / Ykkösliiga",
@@ -246,7 +246,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-023",
+      "id": "legacy-team-028",
       "canonicalName": "Gnistan Helsinki",
       "country": "Finland",
       "league": "Veikkausliiga",
@@ -257,7 +257,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-024",
+      "id": "legacy-team-044",
       "canonicalName": "MSK Zilina",
       "country": "Slovakia",
       "league": "Slovak Niké Liga",
@@ -268,7 +268,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-025",
+      "id": "legacy-team-080",
       "canonicalName": "ZNK Agram (w)",
       "country": "Croatia",
       "league": "1. HNLŽ Women's First League",
@@ -279,7 +279,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-026",
+      "id": "legacy-team-060",
       "canonicalName": "Saldus SS/Leevon",
       "country": "Latvia",
       "league": "Pirma Liga",
@@ -290,7 +290,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-027",
+      "id": "legacy-team-059",
       "canonicalName": "FK Rostov Youth",
       "country": "Russia",
       "league": "Russian Youth Championship",
@@ -301,7 +301,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-028",
+      "id": "legacy-team-013",
       "canonicalName": "Dinamo Zagreb",
       "country": "Croatia",
       "league": "HNL",
@@ -312,7 +312,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-029",
+      "id": "legacy-team-022",
       "canonicalName": "FC Nomme United",
       "country": "Estonia",
       "league": "Premium Liiga/Meistriliiga",
@@ -323,7 +323,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-030",
+      "id": "legacy-team-019",
       "canonicalName": "FC Iberia 1999 Tbilisi",
       "country": "Georgia",
       "league": "Erovnuli Liga",
@@ -334,7 +334,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-031",
+      "id": "legacy-team-057",
       "canonicalName": "Rijeka",
       "country": "Croatia",
       "league": "HNL",
@@ -345,7 +345,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-032",
+      "id": "legacy-team-049",
       "canonicalName": "Poland Women",
       "country": "Poland",
       "league": "UEFA Women's International",
@@ -356,7 +356,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-033",
+      "id": "legacy-team-070",
       "canonicalName": "Tabor Sezana",
       "country": "Slovenia",
       "league": "2. SNL",
@@ -367,7 +367,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-034",
+      "id": "legacy-team-018",
       "canonicalName": "FC Gomel",
       "country": "Belarus",
       "league": "Belarusian Premier League",
@@ -378,7 +378,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-035",
+      "id": "legacy-team-065",
       "canonicalName": "Slovan Ljubljana",
       "country": "Slovenia",
       "league": "2. SNL",
@@ -389,7 +389,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-036",
+      "id": "legacy-team-025",
       "canonicalName": "Fotbal Club FCSB",
       "country": "Romania",
       "league": "Romanian Liga I",
@@ -400,7 +400,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-037",
+      "id": "legacy-team-040",
       "canonicalName": "FK Mladost DG",
       "country": "Montenegro",
       "league": "Montenegrin First/Second League",
@@ -411,7 +411,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-038",
+      "id": "legacy-team-023",
       "canonicalName": "FC Pyunik",
       "country": "Armenia",
       "league": "Armenian Premier League",
@@ -422,7 +422,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-039",
+      "id": "legacy-team-002",
       "canonicalName": "Almaz Antey Youth",
       "country": "Russia",
       "league": "Russian Youth Football League (MFL)",
@@ -433,7 +433,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-040",
+      "id": "legacy-team-006",
       "canonicalName": "BE1 NFA",
       "country": "Lithuania",
       "league": "I Lyga",
@@ -444,7 +444,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-041",
+      "id": "legacy-team-014",
       "canonicalName": "Dnepr Mogilev",
       "country": "Belarus",
       "league": "Belarusian Premier League",
@@ -455,7 +455,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-042",
+      "id": "legacy-team-079",
       "canonicalName": "Wolfsberger AC Amateure",
       "country": "Austria",
       "league": "Regionalliga Mitte",
@@ -466,7 +466,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-043",
+      "id": "legacy-team-031",
       "canonicalName": "Inter Milan Women",
       "country": "Italy",
       "league": "Serie A Femminile",
@@ -477,7 +477,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-044",
+      "id": "legacy-team-042",
       "canonicalName": "Napoli",
       "country": "Italy",
       "league": "Serie A",
@@ -488,7 +488,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-045",
+      "id": "legacy-team-026",
       "canonicalName": "Fram Reykjavik",
       "country": "Iceland",
       "league": "Besta deild karla",
@@ -499,7 +499,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-046",
+      "id": "legacy-team-021",
       "canonicalName": "FC Noah",
       "country": "Armenia",
       "league": "Armenian Premier League",
@@ -510,7 +510,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-047",
+      "id": "legacy-team-072",
       "canonicalName": "Taftea IK",
       "country": "Sweden",
       "league": "Division 2",
@@ -521,7 +521,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-048",
+      "id": "legacy-team-016",
       "canonicalName": "FC Dinamo City",
       "country": "Albania",
       "league": "Albanian Superliga",
@@ -532,7 +532,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-049",
+      "id": "legacy-team-034",
       "canonicalName": "KF Laci",
       "country": "Albania",
       "league": "Albanian Superliga",
@@ -543,7 +543,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-050",
+      "id": "legacy-team-069",
       "canonicalName": "Stenungsunds IF",
       "country": "Sweden",
       "league": "Division 2 Norra Götaland",
@@ -554,7 +554,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-051",
+      "id": "legacy-team-010",
       "canonicalName": "Bolivar",
       "country": "Bolivia",
       "league": "Bolivian Primera División",
@@ -565,7 +565,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-052",
+      "id": "legacy-team-054",
       "canonicalName": "Real Cartagena",
       "country": "Colombia",
       "league": "Categoría Primera B",
@@ -576,7 +576,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-053",
+      "id": "legacy-team-045",
       "canonicalName": "Nacional De Football Women",
       "country": "Uruguay",
       "league": "Campeonato Uruguayo Femenino",
@@ -587,7 +587,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-054",
+      "id": "legacy-team-003",
       "canonicalName": "Atletico Nacional Medellin (W)",
       "country": "Colombia",
       "league": "Liga Profesional Femenina",
@@ -598,7 +598,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-055",
+      "id": "legacy-team-048",
       "canonicalName": "Peru Women",
       "country": "Peru",
       "league": "CONMEBOL Women's International",
@@ -609,7 +609,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-056",
+      "id": "legacy-team-047",
       "canonicalName": "Penarol Reserve",
       "country": "Uruguay",
       "league": "Primera División Reserve League",
@@ -620,7 +620,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-057",
+      "id": "legacy-team-075",
       "canonicalName": "Uruguay",
       "country": "Uruguay",
       "league": "CONMEBOL International",
@@ -631,7 +631,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-058",
+      "id": "legacy-team-011",
       "canonicalName": "Boston River Reserve",
       "country": "Uruguay",
       "league": "Primera División Reserve League",
@@ -642,7 +642,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-059",
+      "id": "legacy-team-027",
       "canonicalName": "France U16",
       "country": "France",
       "league": "UEFA International Youth",
@@ -653,7 +653,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-060",
+      "id": "legacy-team-038",
       "canonicalName": "Madura United FC",
       "country": "Indonesia",
       "league": "Liga 1",
@@ -664,7 +664,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-061",
+      "id": "legacy-team-032",
       "canonicalName": "Japan U16",
       "country": "Japan",
       "league": "AFC International Youth",
@@ -675,7 +675,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-062",
+      "id": "legacy-team-073",
       "canonicalName": "Truong Tuoi Dong Nai",
       "country": "Vietnam",
       "league": "V.League 2",
@@ -686,7 +686,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-063",
+      "id": "legacy-team-024",
       "canonicalName": "FC Ulaanbaatar",
       "country": "Mongolia",
       "league": "Mongolian National Premier League",
@@ -697,7 +697,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-064",
+      "id": "legacy-team-051",
       "canonicalName": "Qingdao Team",
       "country": "China",
       "league": "Chinese Super League",
@@ -708,7 +708,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-065",
+      "id": "legacy-team-050",
       "canonicalName": "PVF-CAND FC",
       "country": "Vietnam",
       "league": "V.League 2",
@@ -719,7 +719,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-066",
+      "id": "legacy-team-007",
       "canonicalName": "Beijing Guoan",
       "country": "China",
       "league": "Chinese Super League",
@@ -730,7 +730,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-067",
+      "id": "legacy-team-041",
       "canonicalName": "Mohun Bagan Super Giant",
       "country": "India",
       "league": "Indian Super League",
@@ -741,7 +741,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-068",
+      "id": "legacy-team-062",
       "canonicalName": "Shanghai Shenhua",
       "country": "China",
       "league": "Chinese Super League",
@@ -752,7 +752,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-069",
+      "id": "legacy-team-061",
       "canonicalName": "Shanghai Port",
       "country": "China",
       "league": "Chinese Super League",
@@ -763,7 +763,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-070",
+      "id": "legacy-team-033",
       "canonicalName": "Johor Darul Ta'zim FC",
       "country": "Malaysia",
       "league": "Malaysia Super League",
@@ -774,7 +774,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-071",
+      "id": "legacy-team-030",
       "canonicalName": "Hunters FC",
       "country": "Mongolia",
       "league": "Mongolian National Premier League",
@@ -785,7 +785,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-072",
+      "id": "legacy-team-046",
       "canonicalName": "Pattani",
       "country": "Thailand",
       "league": "Thai League 3",
@@ -796,7 +796,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-073",
+      "id": "legacy-team-039",
       "canonicalName": "MC Oran",
       "country": "Algeria",
       "league": "Algerian Ligue Professionnelle 1",
@@ -807,7 +807,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-074",
+      "id": "legacy-team-071",
       "canonicalName": "Tabora United FC",
       "country": "Tanzania",
       "league": "Tanzanian Premier League",
@@ -818,7 +818,7 @@
       "mappingState": "unresolved"
     },
     {
-      "id": "favourite-team-075",
+      "id": "legacy-team-004",
       "canonicalName": "Azam FC",
       "country": "Tanzania",
       "league": "Tanzanian Premier League",
