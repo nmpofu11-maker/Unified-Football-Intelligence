@@ -251,8 +251,12 @@ app.get("/api/teams/provider-search/results", async (req: Request, res: Response
 
 
 app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
-  const discovery = await getStoredTeamIdentityDiscovery(teamSeed.teams);
+  const [discovery, searchReview] = await Promise.all([
+    getStoredTeamIdentityDiscovery(teamSeed.teams),
+    getStoredTeamSearchReview(teamSeed.teams)
+  ]);
   const byId = new Map(discovery.teams.map(team => [team.trackedTeamId, team]));
+  const searchesById = new Map(searchReview.teams.map(team => [team.trackedTeamId, team]));
   return res.json({
     source: teamSeed.source,
     count: teamSeed.count,
@@ -263,7 +267,17 @@ app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
       ...(discovery.errorCode ? { errorCode: discovery.errorCode } : {})
     },
     note: "The favourite-team list is preserved. Provider identities are derived conservatively from stored fixture observations; unresolved names are not guessed.",
-    teams: teamSeed.teams.map(team => ({ ...team, identityDiscovery: byId.get(team.id) ?? { trackedTeamId: team.id, canonicalName: team.canonicalName, state: "unresolved", identities: [], reasons: ["durable_identity_discovery_unavailable"] } }))
+    providerSearchReview: {
+      state: searchReview.state,
+      searchedTeams: searchReview.searchedTeams,
+      candidateCount: searchReview.candidateCount,
+      note: "Provider search candidates are suggestions only; they are not approved mappings."
+    },
+    teams: teamSeed.teams.map(team => ({
+      ...team,
+      identityDiscovery: byId.get(team.id) ?? { trackedTeamId: team.id, canonicalName: team.canonicalName, state: "unresolved", identities: [], reasons: ["durable_identity_discovery_unavailable"] },
+      providerSearch: searchesById.get(team.id) ?? { trackedTeamId: team.id, canonicalName: team.canonicalName, state: "never_searched", providers: [] }
+    }))
   });
 });
 
