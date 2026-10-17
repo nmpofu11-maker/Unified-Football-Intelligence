@@ -168,10 +168,16 @@ function normalizedCountry(value: string): string {
     .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
-function observedSquadCategory(name: string): "women" | "youth" | "reserve" | "senior" {
+function observedSquadCategory(name: string): "women" | "youth" | "women_youth" | "reserve" | "senior" {
   const value = normalise(name);
-  if (/(^| )(women|woman|ladies|female|w)$/.test(value)) return "women";
-  if (/(^| )(u[0-9]{1,2}|youth|academy|junior|juniors)$/.test(value)) return "youth";
+  const isWomen = /(^| )(women|woman|ladies|female|w)$/.test(value);
+  // Youth markers may occur before a gender marker, e.g. "France U16 W".
+  // Preserve both qualifiers so a women's youth side cannot be mistaken for
+  // the men's/international youth team (or the senior women's side).
+  const isYouth = /(^| )(u[0-9]{1,2}|youth|academy|junior|juniors)( |$)/.test(value);
+  if (isWomen && isYouth) return "women_youth";
+  if (isWomen) return "women";
+  if (isYouth) return "youth";
   if (/(^| )(ii|iii|iv|b|res|reserve|reserves|amateure|amateures|amateurs)$/.test(value)) return "reserve";
   return "senior";
 }
