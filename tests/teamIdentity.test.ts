@@ -68,7 +68,7 @@ test("normalizes accents and punctuation but does not strip team category suffix
   assert.equal(result[1]?.state, "unresolved");
 });
 
-import { reconcileTeamSearchIdentity, reviewTeamSearchCandidates } from "../src/domain/teamIdentity.js";
+import { classifyProviderIdentityState, reconcileTeamSearchIdentity, reviewTeamSearchCandidates } from "../src/domain/teamIdentity.js";
 import type { TeamSearchProviderResult } from "../src/providers/teamSearch.js";
 
 test("confirms only unique exact cross-provider candidates with matching country", () => {
@@ -267,3 +267,27 @@ test("classifies women's youth candidates separately from international youth wa
   assert.equal(japan.find(item => item.providerTeamId === "27134")?.categoryMatch, "mismatch");
 });
 
+
+
+test("separates a safe provider-scoped candidate from cross-provider confirmation", () => {
+  assert.equal(classifyProviderIdentityState("unresolved", true, "candidate_matches_watchlist_context"), "provider_candidate");
+  assert.equal(classifyProviderIdentityState("unresolved", true, "needs_review"), "needs_review");
+  assert.equal(classifyProviderIdentityState("unresolved", false), "unresolved");
+  assert.equal(classifyProviderIdentityState("ambiguous", true, "candidate_matches_watchlist_context"), "ambiguous");
+  assert.equal(classifyProviderIdentityState("confirmed", true, "candidate_matches_watchlist_context"), "cross_provider_confirmed");
+});
+
+test("a provider-scoped candidate never promotes an unresolved team to cross-provider confirmed", () => {
+  const results: TeamSearchProviderResult[] = [
+    { provider: "api-football", state: "success", candidates: [{ provider: "api-football", providerTeamId: "569", name: "Club Brugge KV", country: "Belgium" }] },
+    { provider: "sportmonks", state: "success_empty", candidates: [] }
+  ];
+  const tracked = { id: "club-brugge", canonicalName: "Club Brugge", country: "Belgium", teamCategory: "senior" };
+  const resolution = reconcileTeamSearchIdentity(tracked, results);
+  const assessment = reviewTeamSearchCandidates(tracked, results.map(item => ({
+    provider: item.provider, candidates: item.candidates.map(candidate => ({ providerTeamId: candidate.providerTeamId, name: candidate.name, ...(candidate.country ? { country: candidate.country } : {}) }))
+  }))).find(item => item.providerTeamId === "569");
+  assert.equal(resolution.state, "unresolved");
+  assert.equal(classifyProviderIdentityState(resolution.state, true, assessment?.reviewState), "provider_candidate");
+  assert.ok(!resolution.reasons.includes("unique_exact_name_and_country_match_across_two_providers"));
+});

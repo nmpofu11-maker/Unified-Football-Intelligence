@@ -423,8 +423,10 @@ app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
       confirmed: identityMappings.confirmed,
       ambiguous: identityMappings.ambiguous,
       unresolved: identityMappings.unresolved,
+      providerCandidates: identityMappings.providerCandidates,
+      needsReviewCandidates: identityMappings.needsReviewCandidates,
       ...(identityMappings.errorCode ? { errorCode: identityMappings.errorCode } : {}),
-      note: "A mapping is confirmed only when unique exact/curated-name candidates from both providers agree on country. This is identity evidence, not verified historical results."
+      note: "Provider-scoped candidates are usable only as provider-specific identity hints; they are not cross-provider confirmation and never count as verified historical results."
     },
     teams: teamSeed.teams.map(team => ({
       ...team,
@@ -468,7 +470,9 @@ app.get("/api/history/status", async (_req: Request, res: Response) => {
     canonicalTeamMappings: identityMappings.confirmed,
     teamIdentityMappings: {
       state: identityMappings.state, confirmed: identityMappings.confirmed,
-      ambiguous: identityMappings.ambiguous, unresolved: identityMappings.unresolved
+      ambiguous: identityMappings.ambiguous, unresolved: identityMappings.unresolved,
+      providerCandidates: identityMappings.providerCandidates,
+      needsReviewCandidates: identityMappings.needsReviewCandidates
     },
     teamSearchProgress: {
       state: searchReview.state, searchedTeams: searchReview.searchedTeams,

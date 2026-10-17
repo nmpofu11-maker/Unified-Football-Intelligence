@@ -1,7 +1,7 @@
 import { Pool, type PoolClient } from "pg";
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
 import { previewCandidateReconciliation } from "../domain/reconcileCandidates.js";
-import { discoverTrackedTeamIdentities, reconcileTeamSearchIdentity, type TrackedTeamIdentity, type TeamIdentityDiscovery, type TeamSearchIdentityResolution } from "../domain/teamIdentity.js";
+import { classifyProviderIdentityState, discoverTrackedTeamIdentities, reconcileTeamSearchIdentity, reviewTeamSearchCandidates, type TrackedTeamIdentity, type TeamIdentityDiscovery, type TeamSearchIdentityResolution } from "../domain/teamIdentity.js";
 import type { TeamSearchProviderResult } from "../providers/teamSearch.js";
 
 export type ObservationPersistenceState = "saved" | "connected_empty" | "not_configured" | "error";
@@ -117,6 +117,7 @@ async function ensureSchema(client: PoolClient): Promise<void> {
       canonical_name TEXT NOT NULL,
       provider TEXT NOT NULL CHECK (provider IN ('api-football','sportmonks')),
       mapping_state TEXT NOT NULL CHECK (mapping_state IN ('confirmed','ambiguous','unresolved')),
+      provider_identity_state TEXT NOT NULL DEFAULT 'unresolved' CHECK (provider_identity_state IN ('cross_provider_confirmed','provider_candidate','needs_review','ambiguous','unresolved')),
       provider_team_id TEXT,
       provider_team_name TEXT,
       country TEXT,
@@ -125,6 +126,14 @@ async function ensureSchema(client: PoolClient): Promise<void> {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (tracked_team_id, provider)
     )
+  `);
+  await client.query(`ALTER TABLE team_identity_mappings ADD COLUMN IF NOT EXISTS provider_identity_state TEXT NOT NULL DEFAULT 'unresolved'`);
+  await client.query(`
+    UPDATE team_identity_mappings SET provider_identity_state = CASE
+      WHEN mapping_state = 'confirmed' THEN 'cross_provider_confirmed'
+      WHEN mapping_state = 'ambiguous' THEN 'ambiguous'
+      ELSE 'unresolved' END
+    WHERE provider_identity_state = 'unresolved' AND mapping_state <> 'unresolved'
   `);
   await client.query(`
     CREATE TABLE IF NOT EXISTS canonical_fixture_evidence (
@@ -973,27 +982,37 @@ export async function reconcileStoredTeamSearchCandidates(
       }
       if (!complete) skippedIncompleteSearch++;
       const resolution = reconcileTeamSearchIdentity(team, providerResults);
+      const candidateAssessments = reviewTeamSearchCandidates(team, providerResults.map(item => ({
+        provider: item.provider,
+        candidates: item.candidates.map(candidate => ({ providerTeamId: candidate.providerTeamId, name: candidate.name, ...(candidate.country ? { country: candidate.country } : {}) }))
+      })));
       mappings.push(resolution);
       const sourceSearchAt = timestampsByTeam.get(team.id) ?? null;
       for (const provider of ["api-football", "sportmonks"] as const) {
         const identity = resolution.identities.find(item => item.provider === provider);
+        const assessment = candidateAssessments.find(item => item.provider === provider && item.providerTeamId === identity?.providerTeamId);
+        const providerIdentityState = classifyProviderIdentityState(
+          resolution.state, Boolean(identity), assessment?.reviewState
+        );
+        const providerReasons = [...resolution.reasons, ...(assessment?.reasons ?? [])];
         await client.query(
           `INSERT INTO team_identity_mappings
-            (tracked_team_id, canonical_name, provider, mapping_state, provider_team_id,
+            (tracked_team_id, canonical_name, provider, mapping_state, provider_identity_state, provider_team_id,
              provider_team_name, country, reasons, source_search_at, updated_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
            ON CONFLICT (tracked_team_id, provider) DO UPDATE SET
              canonical_name = EXCLUDED.canonical_name,
              mapping_state = EXCLUDED.mapping_state,
+             provider_identity_state = EXCLUDED.provider_identity_state,
              provider_team_id = EXCLUDED.provider_team_id,
              provider_team_name = EXCLUDED.provider_team_name,
              country = EXCLUDED.country,
              reasons = EXCLUDED.reasons,
              source_search_at = EXCLUDED.source_search_at,
              updated_at = NOW()`,
-          [team.id, team.canonicalName, provider, resolution.state,
+          [team.id, team.canonicalName, provider, resolution.state, providerIdentityState,
            identity?.providerTeamId ?? null, identity?.providerName ?? null, identity?.country ?? null,
-           resolution.reasons, sourceSearchAt]
+           providerReasons, sourceSearchAt]
         );
       }
     }
@@ -1017,22 +1036,22 @@ export interface StoredTeamIdentityMapping {
   trackedTeamId: string;
   canonicalName: string;
   state: "confirmed" | "ambiguous" | "unresolved";
-  providers: Array<{ provider: "api-football" | "sportmonks"; providerTeamId?: string; providerTeamName?: string; country?: string; reasons: string[]; updatedAt: string }>;
+  providers: Array<{ provider: "api-football" | "sportmonks"; providerIdentityState: "cross_provider_confirmed" | "provider_candidate" | "needs_review" | "ambiguous" | "unresolved"; providerTeamId?: string; providerTeamName?: string; country?: string; reasons: string[]; updatedAt: string }>;
 }
 export async function getStoredTeamIdentityMappings(
   trackedTeams: TrackedTeamIdentity[]
-): Promise<{ state: "ready" | "not_configured" | "error"; confirmed: number; ambiguous: number; unresolved: number; teams: StoredTeamIdentityMapping[]; errorCode?: string }> {
+): Promise<{ state: "ready" | "not_configured" | "error"; confirmed: number; ambiguous: number; unresolved: number; providerCandidates: number; needsReviewCandidates: number; teams: StoredTeamIdentityMapping[]; errorCode?: string }> {
   const configuredPool = getPool();
-  if (!configuredPool) return { state: "not_configured", confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, teams: [] };
+  if (!configuredPool) return { state: "not_configured", confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, providerCandidates: 0, needsReviewCandidates: 0, teams: [] };
   let client: PoolClient | undefined;
   try {
     client = await configuredPool.connect();
     await ensureSchema(client);
     const result = await client.query<{
       tracked_team_id: string; canonical_name: string; provider: "api-football" | "sportmonks";
-      mapping_state: "confirmed" | "ambiguous" | "unresolved"; provider_team_id: string | null;
+      mapping_state: "confirmed" | "ambiguous" | "unresolved"; provider_identity_state: "cross_provider_confirmed" | "provider_candidate" | "needs_review" | "ambiguous" | "unresolved"; provider_team_id: string | null;
       provider_team_name: string | null; country: string | null; reasons: string[]; updated_at: Date;
-    }>(`SELECT tracked_team_id, canonical_name, provider, mapping_state, provider_team_id,
+    }>(`SELECT tracked_team_id, canonical_name, provider, mapping_state, provider_identity_state, provider_team_id,
                provider_team_name, country, reasons, updated_at
         FROM team_identity_mappings ORDER BY tracked_team_id, provider`);
     const mapped = new Map<string, StoredTeamIdentityMapping>();
@@ -1044,6 +1063,7 @@ export async function getStoredTeamIdentityMappings(
       if (!team) continue;
       team.providers.push({
         provider: row.provider,
+        providerIdentityState: row.provider_identity_state,
         ...(row.provider_team_id ? { providerTeamId: row.provider_team_id } : {}),
         ...(row.provider_team_name ? { providerTeamName: row.provider_team_name } : {}),
         ...(row.country ? { country: row.country } : {}),
@@ -1057,10 +1077,12 @@ export async function getStoredTeamIdentityMappings(
       confirmed: teams.filter(team => team.state === "confirmed" && team.providers.length === 2).length,
       ambiguous: teams.filter(team => team.state === "ambiguous").length,
       unresolved: teams.filter(team => team.state === "unresolved").length,
+      providerCandidates: teams.reduce((sum, team) => sum + team.providers.filter(provider => provider.providerIdentityState === "provider_candidate").length, 0),
+      needsReviewCandidates: teams.reduce((sum, team) => sum + team.providers.filter(provider => provider.providerIdentityState === "needs_review").length, 0),
       teams
     };
   } catch (error) {
-    return { state: "error", confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, teams: [], errorCode: safeErrorCode(error) };
+    return { state: "error", confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, providerCandidates: 0, needsReviewCandidates: 0, teams: [], errorCode: safeErrorCode(error) };
   } finally {
     client?.release();
   }

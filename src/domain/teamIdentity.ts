@@ -234,6 +234,24 @@ export function reviewTeamSearchCandidates(
   return assessments;
 }
 
+export type ProviderIdentityState = "cross_provider_confirmed" | "provider_candidate" | "needs_review" | "ambiguous" | "unresolved";
+
+/**
+ * Separates a provider-scoped, context-compatible candidate from a confirmed
+ * cross-provider mapping. This status is identity metadata only; it never
+ * upgrades fixture observations into verified results.
+ */
+export function classifyProviderIdentityState(
+  resolutionState: TeamSearchIdentityResolution["state"],
+  identityPresent: boolean,
+  reviewState?: TeamSearchCandidateAssessment["reviewState"]
+): ProviderIdentityState {
+  if (resolutionState === "confirmed" && identityPresent) return "cross_provider_confirmed";
+  if (resolutionState === "ambiguous") return "ambiguous";
+  if (!identityPresent) return "unresolved";
+  return reviewState === "candidate_matches_watchlist_context" ? "provider_candidate" : "needs_review";
+}
+
 export interface TeamSearchIdentityResolution {
   trackedTeamId: string;
   canonicalName: string;
