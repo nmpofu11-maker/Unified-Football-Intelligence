@@ -11,7 +11,7 @@ import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js"
 import { curatedTeamSearchAliases, discoverTrackedTeamIdentities, reviewTeamSearchCandidates } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
 import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
-import { listReviewedTeamMappings, predictStoredFixture, predictionStorageStatus, saveReviewedTeamMapping } from "./prediction/pipeline.js";
+import { listReviewedTeamMappings, listSavedPredictions, predictStoredFixture, predictionStorageStatus, saveReviewedTeamMapping } from "./prediction/pipeline.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -449,6 +449,18 @@ app.get("/api/predictions/status", async (_req: Request, res: Response) => {
     calibratedForBetting: false,
     bettingRecommendationsEnabled: false,
     note: "A working data path is not proof of calibration. Forecasts are exploratory only; betting recommendations remain disabled."
+  });
+});
+
+app.get("/api/predictions/ledger", async (req: Request, res: Response) => {
+  const rawLimit = req.query.limit == null ? 20 : Number(req.query.limit);
+  if (!Number.isInteger(rawLimit) || rawLimit < 1 || rawLimit > 100) {
+    return res.status(400).json({ state: "invalid_request", reason: "limit_must_be_integer_1_to_100" });
+  }
+  const result = await listSavedPredictions(rawLimit);
+  return res.status(result.state === "error" ? 503 : 200).json({
+    ...result,
+    note: "Ledger entries are immutable records of exploratory forecasts and their evidence hashes. They are not calibrated betting recommendations."
   });
 });
 
