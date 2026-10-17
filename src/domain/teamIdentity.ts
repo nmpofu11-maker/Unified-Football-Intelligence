@@ -51,6 +51,28 @@ const CURATED_ALIASES: Record<string, string[]> = {
   "sligo rovers women": ["sligo rovers w"]
 };
 
+/**
+ * Returns at most one trusted query alias for a tracked name. This is narrow by
+ * design and never strips squad qualifiers such as U19, II, B, W, or reserve.
+ */
+export function curatedTeamSearchAliases(team: TrackedTeamIdentity): string[] {
+  const canonical = normalise(team.canonicalName);
+  const candidates = [...(team.aliases ?? [])];
+  for (const [name, aliases] of Object.entries(CURATED_ALIASES)) {
+    if (normalise(name) === canonical || aliases.some(alias => normalise(alias) === canonical)) {
+      candidates.push(...aliases, name);
+    }
+  }
+  const seen = new Set([canonical]);
+  for (const candidate of candidates) {
+    const trimmed = candidate.trim();
+    const normalized = normalise(trimmed);
+    if (!trimmed || seen.has(normalized)) continue;
+    return [trimmed];
+  }
+  return [];
+}
+
 function namesFor(team: TrackedTeamIdentity): Map<string, "canonical_name" | "curated_alias"> {
   const names = new Map<string, "canonical_name" | "curated_alias">();
   names.set(normalise(team.canonicalName), "canonical_name");

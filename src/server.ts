@@ -8,7 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { discoverTrackedTeamIdentities } from "./domain/teamIdentity.js";
+import { curatedTeamSearchAliases, discoverTrackedTeamIdentities } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
 import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 
@@ -224,7 +224,7 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
     trackedTeamId: team.id,
     canonicalName: team.canonicalName,
     state: "discovery_only" as const,
-    providers: await searchTeamAcrossProviders(team.canonicalName)
+    providers: await searchTeamAcrossProviders(team.canonicalName, undefined, undefined, curatedTeamSearchAliases(team))
   })));
   const persistence = await persistTeamSearchObservations(results);
   if (persistence.state !== "saved") {
@@ -269,6 +269,8 @@ app.post("/api/teams/provider-search/next-batch", async (req: Request, res: Resp
     team.providers.length < 2 ||
     team.providers.some(provider =>
       provider.state === "request_error" || provider.state === "rate_limited" ||
+      (provider.state === "success_empty" && provider.errorCode !== "team_search_strategy_v1_exhausted") ||
+      (provider.state === "schema_error" && provider.errorCode === "provider_reported_error") ||
       (provider.state === "http_error" && provider.errorCode?.startsWith("http_5"))
     );
   const neverSearchedIds = new Set(before.teams.filter(team => team.state === "never_searched").map(team => team.trackedTeamId));
@@ -290,7 +292,7 @@ app.post("/api/teams/provider-search/next-batch", async (req: Request, res: Resp
     trackedTeamId: team.id,
     canonicalName: team.canonicalName,
     state: "discovery_only" as const,
-    providers: await searchTeamAcrossProviders(team.canonicalName)
+    providers: await searchTeamAcrossProviders(team.canonicalName, undefined, undefined, curatedTeamSearchAliases(team))
   })));
   const persistence = await persistTeamSearchObservations(results);
   if (persistence.state !== "saved") {
@@ -311,7 +313,7 @@ app.post("/api/teams/provider-search/next-batch", async (req: Request, res: Resp
     persistence,
     identityMapping,
     nextAction: remaining && remaining > 0 ? "Call POST /api/teams/provider-search/next-batch again after respecting provider quotas." : "Review /api/teams/watchlist and /api/teams/provider-search/results.",
-    note: "Processes at most five favourite teams per request. Exact/country-corroborated identities may be confirmed; ambiguous or insufficiently supported identities remain unresolved. No historical results are inferred."
+    note: "Processes at most five favourite teams per request. Canonical searches may use one curated alias fallback when needed. Exact/country-corroborated identities may be confirmed; ambiguous or insufficiently supported identities remain unresolved. No historical results are inferred."
   });
 });
 
