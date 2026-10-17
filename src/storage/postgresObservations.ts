@@ -1,7 +1,7 @@
 import { Pool, type PoolClient } from "pg";
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
 import { previewCandidateReconciliation } from "../domain/reconcileCandidates.js";
-import { discoverTrackedTeamIdentities, reconcileTeamSearchIdentity, reviewTeamSearchCandidates, type TrackedTeamIdentity, type TeamIdentityDiscovery, type TeamSearchIdentityResolution } from "../domain/teamIdentity.js";
+import { classifyProviderIdentityState, discoverTrackedTeamIdentities, reconcileTeamSearchIdentity, reviewTeamSearchCandidates, type TrackedTeamIdentity, type TeamIdentityDiscovery, type TeamSearchIdentityResolution } from "../domain/teamIdentity.js";
 import type { TeamSearchProviderResult } from "../providers/teamSearch.js";
 
 export type ObservationPersistenceState = "saved" | "connected_empty" | "not_configured" | "error";
@@ -991,12 +991,9 @@ export async function reconcileStoredTeamSearchCandidates(
       for (const provider of ["api-football", "sportmonks"] as const) {
         const identity = resolution.identities.find(item => item.provider === provider);
         const assessment = candidateAssessments.find(item => item.provider === provider && item.providerTeamId === identity?.providerTeamId);
-        const providerIdentityState = resolution.state === 'confirmed' && identity
-          ? 'cross_provider_confirmed'
-          : resolution.state === 'ambiguous' ? 'ambiguous'
-          : identity && assessment?.reviewState === 'candidate_matches_watchlist_context'
-            ? 'provider_candidate'
-            : identity ? 'needs_review' : 'unresolved';
+        const providerIdentityState = classifyProviderIdentityState(
+          resolution.state, Boolean(identity), assessment?.reviewState
+        );
         const providerReasons = [...resolution.reasons, ...(assessment?.reasons ?? [])];
         await client.query(
           `INSERT INTO team_identity_mappings
@@ -1043,9 +1040,9 @@ export interface StoredTeamIdentityMapping {
 }
 export async function getStoredTeamIdentityMappings(
   trackedTeams: TrackedTeamIdentity[]
-): Promise<{ state: "ready" | "not_configured" | "error"; confirmed: number; ambiguous: number; unresolved: number; teams: StoredTeamIdentityMapping[]; errorCode?: string }> {
+): Promise<{ state: "ready" | "not_configured" | "error"; confirmed: number; ambiguous: number; unresolved: number; providerCandidates: number; needsReviewCandidates: number; teams: StoredTeamIdentityMapping[]; errorCode?: string }> {
   const configuredPool = getPool();
-  if (!configuredPool) return { state: "not_configured", confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, teams: [] };
+  if (!configuredPool) return { state: "not_configured", confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, providerCandidates: 0, needsReviewCandidates: 0, teams: [] };
   let client: PoolClient | undefined;
   try {
     client = await configuredPool.connect();
@@ -1080,10 +1077,12 @@ export async function getStoredTeamIdentityMappings(
       confirmed: teams.filter(team => team.state === "confirmed" && team.providers.length === 2).length,
       ambiguous: teams.filter(team => team.state === "ambiguous").length,
       unresolved: teams.filter(team => team.state === "unresolved").length,
+      providerCandidates: teams.reduce((sum, team) => sum + team.providers.filter(provider => provider.providerIdentityState === "provider_candidate").length, 0),
+      needsReviewCandidates: teams.reduce((sum, team) => sum + team.providers.filter(provider => provider.providerIdentityState === "needs_review").length, 0),
       teams
     };
   } catch (error) {
-    return { state: "error", confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, teams: [], errorCode: safeErrorCode(error) };
+    return { state: "error", confirmed: 0, ambiguous: 0, unresolved: trackedTeams.length, providerCandidates: 0, needsReviewCandidates: 0, teams: [], errorCode: safeErrorCode(error) };
   } finally {
     client?.release();
   }
