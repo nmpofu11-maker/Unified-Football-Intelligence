@@ -53,19 +53,29 @@ app.get("/health", (_req: Request, res: Response) => res.json({
   liveFixturesAvailable: false, calibratedPredictionsAvailable: false, bettingRecommendationsEnabled: false
 }));
 
-app.get("/api/status", (_req: Request, res: Response) => res.json({
-  status: "foundation",
-  message: "The domain validation and baseline model foundation exist; live ingestion, durable storage and calibration gates are not yet complete.",
-  modules: {
-    canonicalDomain: "implemented_initial_contracts",
-    providerAdapters: "sportapi_ai_and_sportmonks_adapters_implemented_live_validation_pending",
-    durableDatabase: process.env.DATABASE_URL ? "provider_observation_store_configured_connection_must_be_checked" : "not_configured",
-    verifiedHistoricalEvidence: "not_loaded",
-    poissonBaseline: "implemented_not_calibrated",
-    immutablePredictionLedger: "not_implemented",
-    bettingRecommendations: "disabled_until_evidence_and_calibration_gates_pass"
-  }
-}));
+app.get("/api/status", async (_req: Request, res: Response) => {
+  const [storage, predictionStorage, mappings] = await Promise.all([
+    getObservationStoreStatus(),
+    predictionStorageStatus(),
+    listReviewedTeamMappings()
+  ]);
+  const predictionState = predictionStorage.state === "ready" ? predictionStorage : null;
+  return res.status(storage.state === "error" || predictionStorage.state === "error" || mappings.state === "error" ? 503 : 200).json({
+    status: "foundation",
+    message: "The core pipeline and evidence ledger are implemented. Live data coverage and deployment durability must be verified in the target environment; betting recommendations remain disabled.",
+    modules: {
+      canonicalDomain: "implemented_initial_contracts",
+      providerAdapters: "implemented_live_credentials_and_coverage_unverified",
+      durableDatabase: storage.state,
+      predictionStorage: predictionStorage.state,
+      verifiedHistoricalEvidence: predictionState?.evidence ?? "unavailable_until_database_and_evidence_tables_are_ready",
+      reviewedTeamMappings: mappings.state === "ready" ? mappings.mappings.length : mappings.state,
+      poissonBaseline: "implemented_not_calibrated",
+      immutablePredictionLedger: "implemented_evidence_hash_and_read_only_history_endpoint",
+      bettingRecommendations: "disabled_until_evidence_and_out_of_sample_calibration_gates_pass"
+    }
+  });
+});
 
 app.get("/api/storage/status", async (_req: Request, res: Response) => {
   const status = await getObservationStoreStatus();
