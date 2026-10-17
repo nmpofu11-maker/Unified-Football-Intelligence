@@ -152,7 +152,7 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
       canonical_key: string; kickoff_utc: Date | string; home_name: string; away_name: string;
       home_goals: number; away_goals: number; verified_at: Date | string; providers: string[];
     }) => {
-      const settledAt = new Date(row.verified_at).toISOString();
+      const settledAt = row.verified_at instanceof Date ? row.verified_at.toISOString() : new Date(row.verified_at).toISOString();
       const provenance = (Array.isArray(row.providers) ? row.providers : []).map(provider => ({
         provider, retrievedAt: settledAt, evidenceState: "verified" as const
       }));
@@ -160,7 +160,7 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
         fixtureId: row.canonical_key,
         homeTeamId: mappingByName.get(row.home_name) ?? `unmapped-home:${row.canonical_key}`,
         awayTeamId: mappingByName.get(row.away_name) ?? `unmapped-away:${row.canonical_key}`,
-        kickoffUtc: new Date(row.kickoff_utc).toISOString(),
+        kickoffUtc: row.kickoff_utc instanceof Date ? row.kickoff_utc.toISOString() : new Date(row.kickoff_utc).toISOString(),
         result: {
           fixtureId: row.canonical_key, homeGoals: Number(row.home_goals), awayGoals: Number(row.away_goals),
           settledAt, provenance, reconciliationState: "verified" as const
@@ -176,7 +176,7 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
       target: { canonicalKey, kickoffUtc, home: target.home_name, away: target.away_name },
       mappings: [homeTeamId, awayTeamId],
       history: matches.map(m => [m.fixtureId, m.kickoffUtc, m.result.homeGoals, m.result.awayGoals, m.result.settledAt, m.result.provenance.map(p => p.provider)])
-    })).digest("hex');
+    })).digest("hex");
 
     const hasForecast = forecast.forecast.evidenceState !== "insufficient_evidence" &&
       Number.isFinite(forecast.forecast.homeWin) &&
