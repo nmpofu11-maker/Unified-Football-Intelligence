@@ -1003,17 +1003,15 @@ export async function reconcileStoredTeamSearchCandidates(
         const singleSafeCandidate = safeIds.size === 1
           ? safeCandidates.find(item => item.providerTeamId === [...safeIds][0])
           : undefined;
+        const candidateMetadata = singleSafeCandidate
+          ? providerResults.find(item => item.provider === provider)?.candidates
+              .find(candidate => candidate.providerTeamId === singleSafeCandidate.providerTeamId)
+          : undefined;
         const identity = resolvedIdentity ?? (singleSafeCandidate ? {
           provider,
           providerTeamId: singleSafeCandidate.providerTeamId,
           providerName: singleSafeCandidate.providerName,
-          ...(singleSafeCandidate.countryMatch === "match" && team.country
-            ? { country: team.country }
-            : providerResults.find(item => item.provider === provider)?.candidates
-                .find(candidate => candidate.providerTeamId === singleSafeCandidate.providerTeamId)?.country
-                ? { country: providerResults.find(item => item.provider === provider)!.candidates
-                    .find(candidate => candidate.providerTeamId === singleSafeCandidate.providerTeamId)!.country }
-                : {})
+          ...(candidateMetadata?.country ? { country: candidateMetadata.country } : {})
         } : undefined);
         const assessment = candidateAssessments.find(item =>
           item.provider === provider && item.providerTeamId === identity?.providerTeamId
