@@ -241,3 +241,29 @@ test("candidate review surfaces country conflict even when a women's alias and s
   assert.equal(review[0]?.reviewState, "needs_review");
   assert.ok(review[0]?.reasons.includes("candidate_country_conflicts_with_watchlist"));
 });
+
+test("classifies women's youth candidates separately from international youth watchlist teams", () => {
+  const results: TeamSearchProviderResult[] = [{
+    provider: "api-football",
+    state: "success",
+    candidates: [
+      { provider: "api-football", providerTeamId: "22723", name: "France U16", country: "France" },
+      { provider: "api-football", providerTeamId: "27109", name: "France U16 W", country: "France" },
+      { provider: "api-football", providerTeamId: "22724", name: "Japan U16", country: "Japan" },
+      { provider: "api-football", providerTeamId: "27134", name: "Japan U16 W", country: "Japan" }
+    ]
+  }];
+  const france = reviewTeamSearchCandidates({
+    id: "france-u16", canonicalName: "France U16", country: "France", teamCategory: "international_youth"
+  }, results);
+  assert.equal(france.find(item => item.providerTeamId === "22723")?.categoryMatch, "match");
+  assert.equal(france.find(item => item.providerTeamId === "27109")?.categoryMatch, "mismatch");
+  assert.equal(france.find(item => item.providerTeamId === "27109")?.reviewState, "needs_review");
+
+  const japan = reviewTeamSearchCandidates({
+    id: "japan-u16", canonicalName: "Japan U16", country: "Japan", teamCategory: "international_youth"
+  }, results);
+  assert.equal(japan.find(item => item.providerTeamId === "22724")?.categoryMatch, "match");
+  assert.equal(japan.find(item => item.providerTeamId === "27134")?.categoryMatch, "mismatch");
+});
+
