@@ -8,6 +8,7 @@ test("prediction pipeline module exposes strict stored-evidence operations", asy
   assert.equal(typeof mod.saveReviewedTeamMapping, "function");
   assert.equal(typeof mod.listReviewedTeamMappings, "function");
   assert.equal(typeof mod.predictionStorageStatus, "function");
+  assert.equal(typeof mod.listSavedPredictions, "function");
 });
 
 test("prediction refuses to claim availability when PostgreSQL is not configured", async () => {
@@ -17,6 +18,19 @@ test("prediction refuses to claim availability when PostgreSQL is not configured
     const mod = await import("../src/prediction/pipeline.js");
     const result = await mod.predictStoredFixture("fixture-unknown");
     assert.deepEqual(result, { state: "unavailable", reason: "database_not_configured" });
+  } finally {
+    if (previous !== undefined) process.env.DATABASE_URL = previous;
+  }
+});
+
+test("prediction diagnostics do not claim database readiness without configuration", async () => {
+  const previous = process.env.DATABASE_URL;
+  delete process.env.DATABASE_URL;
+  try {
+    const mod = await import("../src/prediction/pipeline.js");
+    assert.deepEqual(await mod.predictionStorageStatus(), { state: "not_configured" });
+    assert.deepEqual(await mod.listSavedPredictions(), { state: "not_configured", predictions: [] });
+    assert.deepEqual(await mod.listReviewedTeamMappings(), { state: "not_configured", mappings: [] });
   } finally {
     if (previous !== undefined) process.env.DATABASE_URL = previous;
   }
