@@ -68,7 +68,7 @@ test("normalizes accents and punctuation but does not strip team category suffix
   assert.equal(result[1]?.state, "unresolved");
 });
 
-import { reconcileTeamSearchIdentity } from "../src/domain/teamIdentity.js";
+import { reconcileTeamSearchIdentity, reviewTeamSearchCandidates } from "../src/domain/teamIdentity.js";
 import type { TeamSearchProviderResult } from "../src/providers/teamSearch.js";
 
 test("confirms only unique exact cross-provider candidates with matching country", () => {
@@ -190,4 +190,54 @@ test("preserves a unique single-provider identity when country metadata is missi
     provider: "api-football", providerTeamId: "af-15", providerName: "15 de Agosto"
   }]);
   assert.ok(resolution.reasons.includes("single_provider_identity_preserved_not_cross_provider_confirmed"));
+});
+
+
+test("candidate review flags wrong-country results and separates senior, reserve, youth, and women squads", () => {
+  const results: TeamSearchProviderResult[] = [
+    {
+      provider: "api-football",
+      state: "success",
+      candidates: [
+        { provider: "api-football", providerTeamId: "569", name: "Club Brugge KV", country: "Belgium" },
+        { provider: "api-football", providerTeamId: "14130", name: "Club Brugge II", country: "Belgium" },
+        { provider: "api-football", providerTeamId: "6344", name: "Club Brugge W", country: "Belgium" },
+        { provider: "api-football", providerTeamId: "7893", name: "Club Brugge U19", country: "Belgium" }
+      ]
+    },
+    { provider: "sportmonks", state: "success_empty", candidates: [] }
+  ];
+  const review = reviewTeamSearchCandidates({
+    id: "team-club-brugge",
+    canonicalName: "Club Brugge",
+    country: "Belgium",
+    teamCategory: "senior"
+  }, results);
+  assert.equal(review.find(item => item.providerTeamId === "569")?.reviewState, "candidate_matches_watchlist_context");
+  assert.equal(review.find(item => item.providerTeamId === "14130")?.categoryMatch, "mismatch");
+  assert.equal(review.find(item => item.providerTeamId === "6344")?.categoryMatch, "mismatch");
+  assert.equal(review.find(item => item.providerTeamId === "7893")?.categoryMatch, "mismatch");
+  assert.equal(review.find(item => item.providerTeamId === "14130")?.reviewState, "needs_review");
+});
+
+test("candidate review surfaces country conflict even when a women's alias and squad category match", () => {
+  const results: TeamSearchProviderResult[] = [
+    {
+      provider: "api-football",
+      state: "success",
+      candidates: [{ provider: "api-football", providerTeamId: "19837", name: "Shelbourne W", country: "England" }]
+    },
+    { provider: "sportmonks", state: "success_empty", candidates: [] }
+  ];
+  const review = reviewTeamSearchCandidates({
+    id: "team-shelbourne-women",
+    canonicalName: "Shelbourne Women",
+    country: "Ireland",
+    teamCategory: "women"
+  }, results);
+  assert.equal(review[0]?.nameMatch, "curated_alias");
+  assert.equal(review[0]?.countryMatch, "conflict");
+  assert.equal(review[0]?.categoryMatch, "match");
+  assert.equal(review[0]?.reviewState, "needs_review");
+  assert.ok(review[0]?.reasons.includes("candidate_country_conflicts_with_watchlist"));
 });

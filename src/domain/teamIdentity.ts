@@ -1,5 +1,6 @@
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
 
+
 export interface TrackedTeamIdentity {
   id: string;
   canonicalName: string;
@@ -148,6 +149,83 @@ export function discoverTrackedTeamIdentities(
       reasons: [...reasons].sort()
     };
   });
+}
+
+
+export interface TeamSearchCandidateAssessment {
+  provider: "api-football" | "sportmonks";
+  providerTeamId: string;
+  providerName: string;
+  nameMatch: "canonical_name" | "curated_alias" | "unrelated_search_result";
+  countryMatch: "match" | "conflict" | "unknown";
+  categoryMatch: "match" | "mismatch" | "unknown";
+  reviewState: "candidate_matches_watchlist_context" | "needs_review";
+  reasons: string[];
+}
+
+function normalizedCountry(value: string): string {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+function observedSquadCategory(name: string): "women" | "youth" | "reserve" | "senior" {
+  const value = normalise(name);
+  if (/(^| )(women|woman|ladies|female|w)$/.test(value)) return "women";
+  if (/(^| )(u[0-9]{1,2}|youth|academy|junior|juniors)$/.test(value)) return "youth";
+  if (/(^| )(ii|iii|iv|b|res|reserve|reserves|amateure|amateures|amateurs)$/.test(value)) return "reserve";
+  return "senior";
+}
+
+/**
+ * Explains whether raw search candidates fit the user's watchlist context.
+ * This is a review aid only: even a matching candidate is not a confirmed
+ * cross-provider identity and is never evidence of settled match history.
+ */
+export function reviewTeamSearchCandidates(
+  tracked: TrackedTeamIdentity,
+  providerResults: Array<{
+    provider: "api-football" | "sportmonks";
+    candidates: Array<{ providerTeamId: string; name: string; country?: string }>;
+  }>
+): TeamSearchCandidateAssessment[] {
+  const acceptedNames = namesFor(tracked);
+  const expectedCategory = tracked.teamCategory;
+  const assessments: TeamSearchCandidateAssessment[] = [];
+  for (const result of providerResults) {
+    for (const candidate of result.candidates) {
+      const normalizedName = normalise(candidate.name);
+      const matchedName = acceptedNames.get(normalizedName);
+      const countryMatch: TeamSearchCandidateAssessment["countryMatch"] =
+        !tracked.country?.trim() || !candidate.country?.trim() ? "unknown" :
+          normalizedCountry(tracked.country) === normalizedCountry(candidate.country) ? "match" : "conflict";
+      const observedCategory = observedSquadCategory(candidate.name);
+      let categoryMatch: TeamSearchCandidateAssessment["categoryMatch"] = "unknown";
+      if (expectedCategory === "senior") categoryMatch = observedCategory === "senior" ? "match" : "mismatch";
+      else if (expectedCategory === "women" || expectedCategory === "international_women") {
+        categoryMatch = observedCategory === "women" ? "match" : "mismatch";
+      } else if (expectedCategory === "youth") categoryMatch = observedCategory === "youth" ? "match" : "mismatch";
+      else if (expectedCategory === "reserve") categoryMatch = observedCategory === "reserve" ? "match" : "mismatch";
+
+      const reasons: string[] = [];
+      if (!matchedName) reasons.push("candidate_name_not_exact_or_curated_alias");
+      if (countryMatch === "conflict") reasons.push("candidate_country_conflicts_with_watchlist");
+      if (categoryMatch === "mismatch") reasons.push("candidate_squad_category_conflicts_with_watchlist");
+      if (countryMatch === "unknown") reasons.push("country_context_missing_or_unavailable");
+      if (categoryMatch === "unknown") reasons.push("squad_category_not_automatically_classified");
+      assessments.push({
+        provider: result.provider,
+        providerTeamId: candidate.providerTeamId,
+        providerName: candidate.name,
+        nameMatch: !matchedName ? "unrelated_search_result" : matchedName,
+        countryMatch,
+        categoryMatch,
+        reviewState: matchedName && countryMatch !== "conflict" && categoryMatch !== "mismatch"
+          ? "candidate_matches_watchlist_context" : "needs_review",
+        reasons
+      });
+    }
+  }
+  return assessments;
 }
 
 export interface TeamSearchIdentityResolution {

@@ -8,7 +8,7 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
-import { curatedTeamSearchAliases, discoverTrackedTeamIdentities } from "./domain/teamIdentity.js";
+import { curatedTeamSearchAliases, discoverTrackedTeamIdentities, reviewTeamSearchCandidates } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
 import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 
@@ -344,6 +344,20 @@ app.get("/api/teams/provider-search/results", async (req: Request, res: Response
   return res.status(summary.state === "error" ? 503 : 200).json({
     ...summary,
     providerCoverage,
+    candidateReview: summary.state === "ready"
+      ? summary.teams.map(row => {
+          const tracked = teamSeed.teams.find(team => team.id === row.trackedTeamId);
+          return {
+            trackedTeamId: row.trackedTeamId,
+            canonicalName: row.canonicalName,
+            country: tracked?.country,
+            league: tracked?.league,
+            teamCategory: tracked?.teamCategory,
+            assessments: tracked ? reviewTeamSearchCandidates(tracked, row.providers) : [],
+            note: "Context assessment only; a candidate is not a confirmed provider mapping or verified match history."
+          };
+        })
+      : [],
     coverageInterpretation: {
       sportmonks: "A successful empty team search means this query returned no candidates; it does not prove the favourite team is invalid. Subscription/competition coverage must be checked separately using the provider's account league catalogue.",
       identity: "A unique candidate from one provider is retained as a candidate identity, not as a cross-provider-confirmed mapping.",
