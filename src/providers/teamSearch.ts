@@ -126,11 +126,21 @@ async function requestSearch(
   }
 }
 
-/** Searches provider-native team catalogues. Results are discovery candidates only, never reviewed mappings. */
+function normaliseSearchName(value: string): string {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Searches provider-native team catalogues. Curated aliases are attempted only
+ * when the canonical query produces no exact-name candidate. Squad qualifiers
+ * are never removed or guessed.
+ */
 export async function searchTeamAcrossProviders(
   teamName: string,
   signal?: AbortSignal,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  fallbackQueries: string[] = []
 ): Promise<TeamSearchProviderResult[]> {
   const query = teamName.trim();
   if (!query || query.length > 120) {
@@ -139,29 +149,83 @@ export async function searchTeamAcrossProviders(
       { provider: "sportmonks", state: "unavailable", candidates: [], errorCode: "invalid_team_name" }
     ];
   }
+
+  const queries = [...new Set([
+    query,
+    ...fallbackQueries
+      .filter(value => typeof value === "string")
+      .map(value => value.trim())
+      .filter(value => value.length > 0 && value.length <= 120)
+  ])].slice(0, 3);
+  const acceptableNames = new Set(queries.map(normaliseSearchName));
   const apiKey = (process.env.API_FOOTBALL_KEY ?? "").trim();
   const sportmonksKey = (process.env.SPORTMONKS_API_KEY ?? process.env.SPORTMONKS_API_TOKEN ?? "").trim();
   const apiBase = (process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io").replace(/\/+$/, "");
   const sportmonksBase = (process.env.SPORTMONKS_BASE_URL || "https://api.sportmonks.com/v3/football").replace(/\/+$/, "");
-  const apiResult = apiKey
-    ? (() => {
-        const url = new URL(`${apiBase}/teams`);
-        url.searchParams.set("search", query);
-        return requestSearch("api-football", url, { "x-apisports-key": apiKey }, candidatesFromApiFootball, signal, fetchImpl);
-      })()
-    : Promise.resolve<TeamSearchProviderResult>({ provider: "api-football", state: "unavailable", candidates: [], errorCode: "credential_not_configured" });
-  const sportmonksResult = sportmonksKey
-    ? (() => {
-        const url = new URL(`${sportmonksBase}/teams/search/${encodeURIComponent(query)}`);
-        url.searchParams.set("include", "country");
-        url.searchParams.set("per_page", "50");
-        url.searchParams.set("page", "1");
-        // Match the credential transport used by the fixture adapter and supported
-        // across Sportmonks v3 deployments. Keep the Authorization header for
-        // deployments that also accept it; never log or expose either credential.
-        url.searchParams.set("api_token", sportmonksKey);
-        return requestSearch("sportmonks", url, { Authorization: sportmonksKey }, candidatesFromSportmonks, signal, fetchImpl);
-      })()
-    : Promise.resolve<TeamSearchProviderResult>({ provider: "sportmonks", state: "unavailable", candidates: [], errorCode: "credential_not_configured" });
+
+  const searchProvider = async (
+    provider: TeamSearchProviderResult["provider"],
+    key: string,
+    buildUrl: (searchQuery: string) => URL,
+    headers: Record<string, string>,
+    parse: (payload: unknown) => TeamSearchCandidate[] | null
+  ): Promise<TeamSearchProviderResult> => {
+    if (!key) {
+      return { provider, state: "unavailable", candidates: [], errorCode: "credential_not_configured" };
+    }
+
+    const collected = new Map<string, TeamSearchCandidate>();
+    for (const [index, searchQuery] of queries.entries()) {
+      const result = await requestSearch(provider, buildUrl(searchQuery), headers, parse, signal, fetchImpl);
+      if (result.state !== "success" && result.state !== "success_empty") {
+        return { ...result, candidates: [...collected.values(), ...result.candidates] };
+      }
+      for (const candidate of result.candidates) {
+        const existing = collected.get(candidate.providerTeamId);
+        if (!existing || (!existing.country && candidate.country)) {
+          collected.set(candidate.providerTeamId, candidate);
+        }
+      }
+      // Only an exact canonical/curated-name candidate ends the search early.
+      if (result.candidates.some(candidate => acceptableNames.has(normaliseSearchName(candidate.name)))) {
+        return { provider, state: "success", candidates: [...collected.values()] };
+      }
+      if (index === queries.length - 1) {
+        const candidates = [...collected.values()];
+        return candidates.length
+          ? { provider, state: "success", candidates }
+          : { provider, state: "success_empty", candidates: [], errorCode: "team_search_strategy_v1_exhausted" };
+      }
+    }
+    return { provider, state: "success_empty", candidates: [], errorCode: "team_search_strategy_v1_exhausted" };
+  };
+
+  const apiResult = searchProvider(
+    "api-football",
+    apiKey,
+    searchQuery => {
+      const url = new URL(apiBase + "/teams");
+      url.searchParams.set("search", searchQuery);
+      return url;
+    },
+    { "x-apisports-key": apiKey },
+    candidatesFromApiFootball
+  );
+  const sportmonksResult = searchProvider(
+    "sportmonks",
+    sportmonksKey,
+    searchQuery => {
+      const url = new URL(sportmonksBase + "/teams/search/" + encodeURIComponent(searchQuery));
+      url.searchParams.set("include", "country");
+      url.searchParams.set("per_page", "50");
+      url.searchParams.set("page", "1");
+      // Sportmonks accepts the token in either a query parameter or Authorization
+      // header. Keep both transports for deployment compatibility; never log either.
+      url.searchParams.set("api_token", sportmonksKey);
+      return url;
+    },
+    { Authorization: sportmonksKey },
+    candidatesFromSportmonks
+  );
   return Promise.all([apiResult, sportmonksResult]);
 }
