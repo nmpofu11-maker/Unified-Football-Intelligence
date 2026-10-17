@@ -158,7 +158,7 @@ export interface TeamSearchIdentityResolution {
     provider: "api-football" | "sportmonks";
     providerTeamId: string;
     providerName: string;
-    country: string;
+    country?: string;
   }>;
   reasons: string[];
 }
@@ -203,12 +203,12 @@ export function reconcileTeamSearchIdentity(
     if (api.candidates.length === 0 && sportmonks.candidates.length === 0) reasons.add("no_exact_or_curated_alias_search_candidate");
     for (const item of providers) {
       const candidate = item.candidates[0];
-      if (candidate?.country?.trim()) {
+      if (candidate) {
         identities.push({
           provider: item.provider,
           providerTeamId: candidate.providerTeamId,
           providerName: candidate.name,
-          country: candidate.country
+          ...(candidate.country?.trim() ? { country: candidate.country } : {})
         });
       }
     }
