@@ -209,7 +209,7 @@ export function reviewTeamSearchCandidates(
       if (expectedCategory === "senior") categoryMatch = observedCategory === "senior" ? "match" : "mismatch";
       else if (expectedCategory === "women" || expectedCategory === "international_women") {
         categoryMatch = observedCategory === "women" ? "match" : "mismatch";
-      } else if (expectedCategory === "youth") categoryMatch = observedCategory === "youth" ? "match" : "mismatch";
+      } else if (expectedCategory === "youth" || expectedCategory === "international_youth") categoryMatch = observedCategory === "youth" ? "match" : "mismatch";
       else if (expectedCategory === "reserve") categoryMatch = observedCategory === "reserve" ? "match" : "mismatch";
 
       const reasons: string[] = [];
