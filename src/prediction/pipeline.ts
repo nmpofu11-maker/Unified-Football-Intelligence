@@ -60,23 +60,26 @@ export async function saveReviewedTeamMapping(input: PredictionTeamMapping) {
   if (/[\\r\\n\\t]/.test(teamId + canonicalName + reviewedBy)) {
     return { state: "invalid_input" as const, reason: "mapping_fields_must_not_contain_control_characters" };
   }
-  await ensurePredictionSchema();
-  // Deliberately no fuzzy matching or automatic name/ID inference.
-  const result = await pool.query(
-    `INSERT INTO prediction_team_registry (team_id, canonical_name, reviewed_by)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (team_id) DO UPDATE SET canonical_name = EXCLUDED.canonical_name,
-       reviewed_by = EXCLUDED.reviewed_by, reviewed_at = NOW()
-     WHERE prediction_team_registry.canonical_name = EXCLUDED.canonical_name
-     RETURNING team_id, canonical_name, reviewed_by, reviewed_at`,
-    [teamId, canonicalName, reviewedBy]
-  );
-  if (!result.rowCount) {
-    return { state: "conflict" as const, reason: "team_id_exists_with_a_different_name_or_name_is_already_mapped" };
+  try {
+    await ensurePredictionSchema();
+    // Deliberately no fuzzy matching or automatic name/ID inference.
+    const result = await pool.query(
+      `INSERT INTO prediction_team_registry (team_id, canonical_name, reviewed_by)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (team_id) DO UPDATE SET canonical_name = EXCLUDED.canonical_name,
+         reviewed_by = EXCLUDED.reviewed_by, reviewed_at = NOW()
+       WHERE prediction_team_registry.canonical_name = EXCLUDED.canonical_name
+       RETURNING team_id, canonical_name, reviewed_by, reviewed_at`,
+      [teamId, canonicalName, reviewedBy]
+    );
+    if (!result.rowCount) {
+      return { state: "conflict" as const, reason: "team_id_exists_with_a_different_name_or_name_is_already_mapped" };
+    }
+    return { state: "saved" as const, mapping: result.rows[0] };
+  } catch {
+    return { state: "error" as const, reason: "prediction_registry_unavailable" };
   }
-  return { state: "saved" as const, mapping: result.rows[0] };
 }
-
 export async function listReviewedTeamMappings() {
   if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const, mappings: [] };
   try {
