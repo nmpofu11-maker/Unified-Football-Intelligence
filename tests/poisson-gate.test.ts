@@ -57,6 +57,6 @@ test("Poisson forecast with missing history abstains instead of returning equal 
   assert.ok(result.forecast.abstentionReasons.length > 0);
   assert.deepEqual(
     [result.forecast.homeWin, result.forecast.draw, result.forecast.awayWin],
-    [0, 0, 0]
+    [null, null, null]
   );
 });
