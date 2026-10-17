@@ -247,9 +247,13 @@ export function classifyProviderIdentityState(
   reviewState?: TeamSearchCandidateAssessment["reviewState"]
 ): ProviderIdentityState {
   if (resolutionState === "confirmed" && identityPresent) return "cross_provider_confirmed";
+  // Cross-provider ambiguity describes the overall mapping, not necessarily
+  // the candidate returned by each provider. Preserve a unique, context-safe
+  // provider-scoped candidate without claiming that the two providers agree.
+  if (identityPresent && reviewState === "candidate_matches_watchlist_context") return "provider_candidate";
   if (resolutionState === "ambiguous") return "ambiguous";
   if (!identityPresent) return "unresolved";
-  return reviewState === "candidate_matches_watchlist_context" ? "provider_candidate" : "needs_review";
+  return "needs_review";
 }
 
 export interface TeamSearchIdentityResolution {
