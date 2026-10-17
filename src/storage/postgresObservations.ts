@@ -989,8 +989,33 @@ export async function reconcileStoredTeamSearchCandidates(
       mappings.push(resolution);
       const sourceSearchAt = timestampsByTeam.get(team.id) ?? null;
       for (const provider of ["api-football", "sportmonks"] as const) {
-        const identity = resolution.identities.find(item => item.provider === provider);
-        const assessment = candidateAssessments.find(item => item.provider === provider && item.providerTeamId === identity?.providerTeamId);
+        const resolvedIdentity = resolution.identities.find(item => item.provider === provider);
+        const safeCandidates = candidateAssessments.filter(item =>
+          item.provider === provider &&
+          item.reviewState === "candidate_matches_watchlist_context" &&
+          item.nameMatch !== "unrelated_search_result"
+        );
+        const safeIds = new Set(safeCandidates.map(item => item.providerTeamId));
+        // If the cross-provider resolver cannot choose a complete mapping (for
+        // example, the other catalogue is empty or the combined result is
+        // ambiguous), retain a provider candidate only when exactly one distinct
+        // ID independently matches the watchlist name, country, and squad type.
+        const singleSafeCandidate = safeIds.size === 1
+          ? safeCandidates.find(item => item.providerTeamId === [...safeIds][0])
+          : undefined;
+        const candidateMetadata = singleSafeCandidate
+          ? providerResults.find(item => item.provider === provider)?.candidates
+              .find(candidate => candidate.providerTeamId === singleSafeCandidate.providerTeamId)
+          : undefined;
+        const identity = resolvedIdentity ?? (singleSafeCandidate ? {
+          provider,
+          providerTeamId: singleSafeCandidate.providerTeamId,
+          providerName: singleSafeCandidate.providerName,
+          ...(candidateMetadata?.country ? { country: candidateMetadata.country } : {})
+        } : undefined);
+        const assessment = candidateAssessments.find(item =>
+          item.provider === provider && item.providerTeamId === identity?.providerTeamId
+        );
         const providerIdentityState = classifyProviderIdentityState(
           resolution.state, Boolean(identity), assessment?.reviewState
         );

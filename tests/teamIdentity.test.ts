@@ -94,6 +94,22 @@ test("keeps country conflicts ambiguous and missing country unresolved", () => {
   assert.equal(reconcileTeamSearchIdentity({ id: "team-1", canonicalName: "Club Example" }, missingCountry).state, "unresolved");
 });
 
+test("rejects curated aliases whose squad category conflicts with the watchlist", () => {
+  const results: TeamSearchProviderResult[] = [
+    { provider: "api-football", state: "success", candidates: [{ provider: "api-football", providerTeamId: "w-101", name: "Club Example W", country: "Ireland" }] },
+    { provider: "sportmonks", state: "success", candidates: [{ provider: "sportmonks", providerTeamId: "w-202", name: "Club Example W", country: "Ireland" }] }
+  ];
+  const resolution = reconcileTeamSearchIdentity({
+    id: "club-example-senior",
+    canonicalName: "Club Example",
+    aliases: ["Club Example W"],
+    country: "Ireland",
+    teamCategory: "senior"
+  }, results);
+  assert.equal(resolution.state, "unresolved");
+  assert.deepEqual(resolution.identities, []);
+});
+
 test("does not merge youth/reserve/women variants by stripping suffixes", () => {
   const results: TeamSearchProviderResult[] = [
     { provider: "api-football", state: "success", candidates: [{ provider: "api-football", providerTeamId: "101", name: "Benfica", country: "Portugal" }] },
@@ -273,7 +289,8 @@ test("separates a safe provider-scoped candidate from cross-provider confirmatio
   assert.equal(classifyProviderIdentityState("unresolved", true, "candidate_matches_watchlist_context"), "provider_candidate");
   assert.equal(classifyProviderIdentityState("unresolved", true, "needs_review"), "needs_review");
   assert.equal(classifyProviderIdentityState("unresolved", false), "unresolved");
-  assert.equal(classifyProviderIdentityState("ambiguous", true, "candidate_matches_watchlist_context"), "ambiguous");
+  assert.equal(classifyProviderIdentityState("ambiguous", true, "candidate_matches_watchlist_context"), "provider_candidate");
+  assert.equal(classifyProviderIdentityState("ambiguous", false, "candidate_matches_watchlist_context"), "ambiguous");
   assert.equal(classifyProviderIdentityState("confirmed", true, "candidate_matches_watchlist_context"), "cross_provider_confirmed");
 });
 
