@@ -327,8 +327,28 @@ app.get("/api/teams/provider-search/results", async (req: Request, res: Response
     return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
   }
   const summary = await getStoredTeamSearchReview(teamSeed.teams);
+  const providerCoverage = (["api-football", "sportmonks"] as const).map(provider => {
+    const rows = summary.state === "ready"
+      ? summary.teams.flatMap(team => team.providers.filter(item => item.provider === provider))
+      : [];
+    const stateCounts: Record<string, number> = {};
+    for (const row of rows) stateCounts[row.state] = (stateCounts[row.state] ?? 0) + 1;
+    return {
+      provider,
+      teamsWithSearchResults: rows.length,
+      teamsWithCandidates: rows.filter(row => row.candidates.length > 0).length,
+      candidateCount: rows.reduce((count, row) => count + row.candidates.length, 0),
+      stateCounts
+    };
+  });
   return res.status(summary.state === "error" ? 503 : 200).json({
     ...summary,
+    providerCoverage,
+    coverageInterpretation: {
+      sportmonks: "A successful empty team search means this query returned no candidates; it does not prove the favourite team is invalid. Subscription/competition coverage must be checked separately using the provider's account league catalogue.",
+      identity: "A unique candidate from one provider is retained as a candidate identity, not as a cross-provider-confirmed mapping.",
+      historicalEvidence: "Team identity candidates do not establish verified historical results or permit calibrated predictions."
+    },
     note: "Saved provider search candidates are for identity review only. They are not canonical mappings and do not establish verified historical evidence."
   });
 });
