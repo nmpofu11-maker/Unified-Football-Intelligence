@@ -24,8 +24,17 @@ export function validateSettledResult(r: SettledResult): string[] {
 }
 export function validateForecast(f: ProbabilityForecast): string[] {
   const e: string[] = [], p = [f.homeWin, f.draw, f.awayWin];
-  if (p.some(v => !Number.isFinite(v) || v < 0 || v > 1)) e.push("probabilities_out_of_range");
-  if (Math.abs(p.reduce((a, b) => a + b, 0) - 1) > 0.001) e.push("probabilities_do_not_sum_to_one");
+  const allUnknown = p.every(v => v === null);
+  const allNumeric = p.every((v): v is number => typeof v === "number" && Number.isFinite(v));
+  if (allUnknown) {
+    if (f.evidenceState !== "insufficient_evidence") e.push("unknown_probabilities_require_insufficient_evidence");
+  } else if (!allNumeric) {
+    e.push("probabilities_must_be_all_numeric_or_all_unknown");
+  } else {
+    if (p.some(v => v < 0 || v > 1)) e.push("probabilities_out_of_range");
+    if (Math.abs(p.reduce((a, b) => a + b, 0) - 1) > 0.001) e.push("probabilities_do_not_sum_to_one");
+    if (f.evidenceState === "insufficient_evidence") e.push("insufficient_evidence_must_not_have_probabilities");
+  }
   if (!isValidUtcTimestamp(f.generatedAt) || !isValidUtcTimestamp(f.featureCutoffAt)) e.push("forecast_timestamps_must_be_utc_iso_timestamps");
   if (Date.parse(f.featureCutoffAt) > Date.parse(f.generatedAt)) e.push("feature_cutoff_in_future");
   if (f.evidenceState !== "verified" && f.abstentionReasons.length === 0) e.push("abstention_reason_required_without_verified_evidence");

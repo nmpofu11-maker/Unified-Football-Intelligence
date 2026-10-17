@@ -13,7 +13,7 @@ export interface SettledResult {
 }
 export interface ProbabilityForecast {
   fixtureId: string; modelId: string; modelVersion: string; generatedAt: string; featureCutoffAt: string;
-  homeWin: number; draw: number; awayWin: number; evidenceState: EvidenceState; abstentionReasons: string[];
+  homeWin: number | null; draw: number | null; awayWin: number | null; evidenceState: EvidenceState; abstentionReasons: string[];
 }
 export interface OddsQuote {
   fixtureId: string; bookmaker: string; market: string; selection: string; decimalOdds: number; observedAt: string; provenance: Provenance;

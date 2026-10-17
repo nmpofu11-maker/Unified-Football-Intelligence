@@ -189,9 +189,9 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
     })).digest("hex");
 
     const hasForecast = forecast.forecast.evidenceState !== "insufficient_evidence" &&
-      Number.isFinite(forecast.forecast.homeWin) &&
-      Number.isFinite(forecast.forecast.draw) &&
-      Number.isFinite(forecast.forecast.awayWin) &&
+      typeof forecast.forecast.homeWin === "number" && Number.isFinite(forecast.forecast.homeWin) &&
+      typeof forecast.forecast.draw === "number" && Number.isFinite(forecast.forecast.draw) &&
+      typeof forecast.forecast.awayWin === "number" && Number.isFinite(forecast.forecast.awayWin) &&
       Math.abs(forecast.forecast.homeWin + forecast.forecast.draw + forecast.forecast.awayWin - 1) < 0.002;
     if (hasForecast) {
       await pool.query(

@@ -109,7 +109,7 @@ export function forecastPoisson(input: ForecastInput): ForecastOutput {
     forecast: {
       fixtureId: input.fixtureId, modelId: "poisson-baseline", modelVersion: "0.1.0",
       generatedAt: input.generatedAt, featureCutoffAt: input.generatedAt,
-      homeWin: reasons.length ? 0 : homeWin, draw: reasons.length ? 0 : draw, awayWin: reasons.length ? 0 : awayWin,
+      homeWin: reasons.length ? null : homeWin, draw: reasons.length ? null : draw, awayWin: reasons.length ? null : awayWin,
       evidenceState, abstentionReasons: reasons.length ? reasons : ["baseline_not_yet_calibrated_for_betting"]
     },
     diagnostics: { homeSamples: homeMatches.length, awaySamples: awayMatches.length, leagueSamples: eligible.length,
