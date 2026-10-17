@@ -1,5 +1,5 @@
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
-import type { TeamSearchCandidate, TeamSearchProviderResult } from "../providers/teamSearch.js";
+import type { TeamSearchProviderResult } from "../providers/teamSearch.js";
 
 export interface TrackedTeamIdentity {
   id: string;
