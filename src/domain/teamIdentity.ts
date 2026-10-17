@@ -183,7 +183,7 @@ function observedSquadCategory(name: string): "women" | "youth" | "reserve" | "s
  */
 export function reviewTeamSearchCandidates(
   tracked: TrackedTeamIdentity,
-  providerResults: TeamSearchProviderResult[]
+  providerResults: Array<Pick<TeamSearchProviderResult, "provider" | "candidates">>
 ): TeamSearchCandidateAssessment[] {
   const acceptedNames = namesFor(tracked);
   const expectedCategory = tracked.teamCategory;
