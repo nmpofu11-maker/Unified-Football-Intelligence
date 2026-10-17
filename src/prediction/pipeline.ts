@@ -228,13 +228,74 @@ export async function predictionStorageStatus() {
   if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const };
   try {
     await ensurePredictionSchema();
-    const result = await pool.query(
+    const schema = await pool.query(
+      `SELECT
+         to_regclass('public.canonical_fixture_evidence') IS NOT NULL AS canonical_fixture_schema_ready,
+         to_regclass('public.verified_settled_results') IS NOT NULL AS verified_result_schema_ready,
+         to_regclass('public.provider_fixture_observations') IS NOT NULL AS provider_observation_schema_ready`
+    );
+    const ready = schema.rows[0] as {
+      canonical_fixture_schema_ready: boolean;
+      verified_result_schema_ready: boolean;
+      provider_observation_schema_ready: boolean;
+    };
+    const counts = await pool.query(
       `SELECT
          (SELECT COUNT(*)::int FROM prediction_team_registry) AS reviewed_team_mappings,
          (SELECT COUNT(*)::int FROM prediction_ledger) AS saved_forecasts`
     );
-    return { state: "ready" as const, ...result.rows[0] };
+    let evidence = {
+      corroboratedScheduledFixtures: null as number | null,
+      verifiedSettledResults: null as number | null,
+      providerObservations: null as number | null,
+      latestVerifiedResultAt: null as string | null
+    };
+    if (ready.canonical_fixture_schema_ready && ready.verified_result_schema_ready) {
+      const evidenceResult = await pool.query(
+        `SELECT
+           (SELECT COUNT(*)::int FROM canonical_fixture_evidence WHERE evidence_state = 'corroborated' AND status = 'scheduled' AND kickoff_utc > NOW()) AS corroborated_scheduled_fixtures,
+           (SELECT COUNT(*)::int FROM verified_settled_results WHERE evidence_state = 'verified') AS verified_settled_results,
+           (SELECT MAX(verified_at)::text FROM verified_settled_results WHERE evidence_state = 'verified') AS latest_verified_result_at`
+      );
+      evidence = {
+        ...evidence,
+        corroboratedScheduledFixtures: evidenceResult.rows[0].corroborated_scheduled_fixtures,
+        verifiedSettledResults: evidenceResult.rows[0].verified_settled_results,
+        latestVerifiedResultAt: evidenceResult.rows[0].latest_verified_result_at
+      };
+    }
+    if (ready.provider_observation_schema_ready) {
+      const observationResult = await pool.query("SELECT COUNT(*)::int AS count FROM provider_fixture_observations");
+      evidence.providerObservations = observationResult.rows[0].count;
+    }
+    return {
+      state: "ready" as const,
+      ...counts.rows[0],
+      schemas: ready,
+      evidence,
+      forecastAvailableToBet: false,
+      note: "Ready means the database is reachable. It does not mean verified history is sufficient or the model is calibrated."
+    };
   } catch {
     return { state: "error" as const, errorCode: "prediction_storage_unavailable" };
+  }
+}
+
+export async function listSavedPredictions(limitInput = 20) {
+  if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const, predictions: [] };
+  const limit = Number.isInteger(limitInput) ? Math.max(1, Math.min(100, limitInput)) : 20;
+  try {
+    await ensurePredictionSchema();
+    const result = await pool.query(
+      `SELECT id, canonical_key, generated_at, model_id, model_version, evidence_hash,
+              evidence_state, forecast, diagnostics, created_at
+       FROM prediction_ledger
+       ORDER BY generated_at DESC, id DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return { state: "ready" as const, count: result.rows.length, predictions: result.rows };
+  } catch {
+    return { state: "error" as const, predictions: [], errorCode: "prediction_ledger_unavailable" };
   }
 }
