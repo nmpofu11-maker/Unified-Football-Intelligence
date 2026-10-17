@@ -273,7 +273,8 @@ test("separates a safe provider-scoped candidate from cross-provider confirmatio
   assert.equal(classifyProviderIdentityState("unresolved", true, "candidate_matches_watchlist_context"), "provider_candidate");
   assert.equal(classifyProviderIdentityState("unresolved", true, "needs_review"), "needs_review");
   assert.equal(classifyProviderIdentityState("unresolved", false), "unresolved");
-  assert.equal(classifyProviderIdentityState("ambiguous", true, "candidate_matches_watchlist_context"), "ambiguous");
+  assert.equal(classifyProviderIdentityState("ambiguous", true, "candidate_matches_watchlist_context"), "provider_candidate");
+  assert.equal(classifyProviderIdentityState("ambiguous", false, "candidate_matches_watchlist_context"), "ambiguous");
   assert.equal(classifyProviderIdentityState("confirmed", true, "candidate_matches_watchlist_context"), "cross_provider_confirmed");
 });
 
