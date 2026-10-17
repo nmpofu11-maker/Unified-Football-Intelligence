@@ -144,8 +144,9 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
          AND f.kickoff_utc < $1::timestamptz
          AND r.verified_at <= $2::timestamptz
          AND f.canonical_key <> $3
+         AND f.competition_name = $4
        ORDER BY f.kickoff_utc DESC`,
-      [kickoffUtc, generatedAt, canonicalKey]
+      [kickoffUtc, generatedAt, canonicalKey, target.competition_name]
     );
 
     const matches: HistoricalMatch[] = historyResult.rows.map((row: {
