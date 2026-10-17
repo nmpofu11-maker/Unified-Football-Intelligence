@@ -984,7 +984,7 @@ export async function reconcileStoredTeamSearchCandidates(
       const resolution = reconcileTeamSearchIdentity(team, providerResults);
       const candidateAssessments = reviewTeamSearchCandidates(team, providerResults.map(item => ({
         provider: item.provider,
-        candidates: item.candidates.map(candidate => ({ providerTeamId: candidate.providerTeamId, name: candidate.name, country: candidate.country }))
+        candidates: item.candidates.map(candidate => ({ providerTeamId: candidate.providerTeamId, name: candidate.name, ...(candidate.country ? { country: candidate.country } : {}) }))
       })));
       mappings.push(resolution);
       const sourceSearchAt = timestampsByTeam.get(team.id) ?? null;
