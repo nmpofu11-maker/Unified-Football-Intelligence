@@ -475,7 +475,7 @@ app.post("/api/predictions/team-mappings", async (req: Request, res: Response) =
     canonicalName: typeof body.canonicalName === "string" ? body.canonicalName : "",
     reviewedBy: typeof body.reviewedBy === "string" ? body.reviewedBy : ""
   });
-  const statusCode = result.state === "saved" ? 201 : result.state === "conflict" ? 409 : 400;
+  const statusCode = result.state === "saved" ? 201 : result.state === "conflict" ? 409 : result.state === "error" ? 503 : 400;
   return res.status(statusCode).json(result);
 });
 
