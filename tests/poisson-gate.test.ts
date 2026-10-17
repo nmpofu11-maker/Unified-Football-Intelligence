@@ -41,9 +41,12 @@ test("Poisson forecast computes probabilities from verified history, not a neutr
   });
   assert.equal(result.forecast.evidenceState, "unverified");
   const { homeWin, draw, awayWin } = result.forecast;
-  assert.ok(homeWin > 0 && draw > 0 && awayWin > 0);
-  assert.ok(Math.abs(homeWin + draw + awayWin - 1) < 0.002);
-  assert.ok(Math.max(homeWin, draw, awayWin) - Math.min(homeWin, draw, awayWin) > 0.05);
+  assert.equal(typeof homeWin, "number");
+  assert.equal(typeof draw, "number");
+  assert.equal(typeof awayWin, "number");
+  assert.ok(homeWin! > 0 && draw! > 0 && awayWin! > 0);
+  assert.ok(Math.abs(homeWin! + draw! + awayWin! - 1) < 0.002);
+  assert.ok(Math.max(homeWin!, draw!, awayWin!) - Math.min(homeWin!, draw!, awayWin!) > 0.05);
   assert.ok(result.diagnostics.expectedHomeGoals !== null);
   assert.ok(result.diagnostics.expectedAwayGoals !== null);
 });
