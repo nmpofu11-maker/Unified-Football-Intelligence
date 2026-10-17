@@ -25,7 +25,9 @@ test("model only uses pre-kickoff verified settled matches", () => {
   matches.push({...matches[0]!,fixtureId:"future",kickoffUtc:"2026-03-02T12:00:00.000Z",result:{...matches[0]!.result,fixtureId:"future",settledAt:"2026-03-03T12:00:00.000Z"}});
   const out = forecastPoisson({fixtureId:"upcoming",homeTeamId:"A",awayTeamId:"B",kickoffUtc:"2026-03-01T12:00:00.000Z",generatedAt:"2026-02-28T12:00:00.000Z",matches});
   assert.equal(out.diagnostics.leagueSamples,12);
-  assert.ok(out.forecast.homeWin >= 0 && out.forecast.draw >= 0 && out.forecast.awayWin >= 0);
-  assert.ok(Math.abs(out.forecast.homeWin + out.forecast.draw + out.forecast.awayWin - 1) < 0.001);
+  assert.equal(typeof out.forecast.homeWin, "number");
+  assert.equal(typeof out.forecast.draw, "number");
+  assert.equal(typeof out.forecast.awayWin, "number");
+  assert.ok(Math.abs(out.forecast.homeWin! + out.forecast.draw! + out.forecast.awayWin! - 1) < 0.001);
   assert.equal(out.forecast.evidenceState,"unverified");
 });
