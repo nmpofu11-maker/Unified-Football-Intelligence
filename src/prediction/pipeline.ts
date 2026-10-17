@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { Pool } from "pg";
 import { forecastPoisson, type HistoricalMatch } from "../models/poisson.js";
+import { checkFixtureFreshness } from "./freshness.js";
 
 type State = "ready" | "not_configured" | "error";
 const pool = new Pool({
@@ -107,7 +108,7 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
   try {
     await ensurePredictionSchema();
     const targetResult = await pool.query(
-      `SELECT canonical_key, kickoff_utc, home_name, away_name, competition_name, status, evidence_state
+      `SELECT canonical_key, kickoff_utc, home_name, away_name, competition_name, status, evidence_state, updated_at
        FROM canonical_fixture_evidence WHERE canonical_key = $1`,
       [canonicalKey]
     );
@@ -115,6 +116,11 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
     if (!target) return { state: "withheld" as const, reason: "FIXTURE_NOT_FOUND" };
     if (target.evidence_state !== "corroborated") return { state: "withheld" as const, reason: "FIXTURE_NOT_CORROBORATED" };
     if (target.status !== "scheduled") return { state: "withheld" as const, reason: "FIXTURE_NOT_SCHEDULED" };
+    const maxAgeMinutes = Number(process.env.FIXTURE_EVIDENCE_MAX_AGE_MINUTES ?? 180);
+    const freshness = checkFixtureFreshness(target.updated_at, generatedAt, maxAgeMinutes);
+    if (freshness.state !== "fresh") {
+      return { state: "withheld" as const, reason: freshness.state === "stale" ? "FIXTURE_EVIDENCE_STALE" : "FIXTURE_FRESHNESS_POLICY_INVALID", freshness };
+    }
     const kickoffUtc = new Date(target.kickoff_utc).toISOString();
     if (Date.parse(kickoffUtc) <= Date.parse(generatedAt)) {
       return { state: "withheld" as const, reason: "FIXTURE_KICKOFF_NOT_IN_FUTURE" };

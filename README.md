@@ -34,7 +34,7 @@ The prediction path reads directly from PostgreSQL; it does not accept user-supp
 - `POST /api/predictions/run` — body `{"canonicalKey":"exact canonical key from /api/fixtures"}`.
 - `GET /api/predictions?canonicalKey=...` — same prediction operation via query string.
 
-The prediction route requires a corroborated, future scheduled fixture; exact reviewed mappings for both teams; and enough verified settled results from the **same competition** strictly before kickoff. It records a SHA-256 evidence hash and stores eligible forecasts in `prediction_ledger`. Missing evidence yields a withheld response rather than percentages.
+The prediction route requires a corroborated, future scheduled fixture; exact reviewed mappings for both teams; and enough verified settled results from the **same competition** strictly before kickoff. It also requires the fixture evidence to be fresh: by default, the canonical evidence row must have been updated within the last 180 minutes at forecast time. Configure `FIXTURE_EVIDENCE_MAX_AGE_MINUTES` to a positive value up to 10,080 minutes (7 days) for your deployment; invalid policy values, stale evidence, or timestamps too far in the future cause the forecast to be withheld. It records a SHA-256 evidence hash and stores eligible forecasts in `prediction_ledger`. Missing evidence yields a withheld response rather than percentages.
 
 The Poisson baseline is explicitly marked uncalibrated. Forecast availability is not a betting recommendation; betting recommendations remain disabled until a genuinely out-of-sample calibration and evaluation pipeline passes separate gates. Team mappings are manual reviews, not automatic provider-ID discovery.
 

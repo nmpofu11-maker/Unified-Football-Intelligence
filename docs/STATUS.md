@@ -15,12 +15,7 @@
 
 ## CI verification
 
-The readiness and ledger API change was merged as `6e2d464eedfaae5532bce6944666cec7c0065154`. Its pull-request CI run passed:
-- `npm run typecheck`
-- `npm test`
-- `npm run build`
-
-A subsequent status-contract correction is being validated separately; do not treat its checks as passed until its own CI run completes.
+The readiness and ledger API change was merged as `6e2d464eedfaae5532bce6944666cec7c0065154`. The status-contract correction was merged as `4065a8f8eef7c0880c1d18673c2db8a2a0b231fc`; the correction's pull-request head CI passed `npm run typecheck`, `npm test`, and `npm run build`. A separate CI result for the squash merge commit itself has not been confirmed here.
 
 ## Not yet verified in a live environment
 
