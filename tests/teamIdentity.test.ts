@@ -285,7 +285,7 @@ test("a provider-scoped candidate never promotes an unresolved team to cross-pro
   const tracked = { id: "club-brugge", canonicalName: "Club Brugge", country: "Belgium", teamCategory: "senior" };
   const resolution = reconcileTeamSearchIdentity(tracked, results);
   const assessment = reviewTeamSearchCandidates(tracked, results.map(item => ({
-    provider: item.provider, candidates: item.candidates.map(candidate => ({ providerTeamId: candidate.providerTeamId, name: candidate.name, country: candidate.country }))
+    provider: item.provider, candidates: item.candidates.map(candidate => ({ providerTeamId: candidate.providerTeamId, name: candidate.name, ...(candidate.country ? { country: candidate.country } : {}) }))
   }))).find(item => item.providerTeamId === "569");
   assert.equal(resolution.state, "unresolved");
   assert.equal(classifyProviderIdentityState(resolution.state, true, assessment?.reviewState), "provider_candidate");
