@@ -11,6 +11,7 @@ import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js"
 import { curatedTeamSearchAliases, discoverTrackedTeamIdentities, reviewTeamSearchCandidates } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
 import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
+import { listReviewedTeamMappings, predictStoredFixture, predictionStorageStatus, saveReviewedTeamMapping } from "./prediction/pipeline.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -437,6 +438,67 @@ app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
   });
 });
 
+app.get("/api/predictions/status", async (_req: Request, res: Response) => {
+  const status = await predictionStorageStatus();
+  const mappings = await listReviewedTeamMappings();
+  return res.status(status.state === "error" || mappings.state === "error" ? 503 : 200).json({
+    ...status,
+    teamMappingsState: mappings.state,
+    teamMappingCount: mappings.state === "ready" ? mappings.mappings.length : null,
+    predictionModel: "poisson-baseline",
+    calibratedForBetting: false,
+    bettingRecommendationsEnabled: false,
+    note: "A working data path is not proof of calibration. Forecasts are exploratory only; betting recommendations remain disabled."
+  });
+});
+
+app.get("/api/predictions/team-mappings", async (_req: Request, res: Response) => {
+  const result = await listReviewedTeamMappings();
+  return res.status(result.state === "error" ? 503 : 200).json({
+    ...result,
+    note: "Mappings are manually reviewed exact canonical names. No fuzzy matching or automatic identity guesses are used."
+  });
+});
+
+app.post("/api/predictions/team-mappings", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+  const body = req.body ?? {};
+  const result = await saveReviewedTeamMapping({
+    teamId: typeof body.teamId === "string" ? body.teamId : "",
+    canonicalName: typeof body.canonicalName === "string" ? body.canonicalName : "",
+    reviewedBy: typeof body.reviewedBy === "string" ? body.reviewedBy : ""
+  });
+  const statusCode = result.state === "saved" ? 201 : result.state === "conflict" ? 409 : result.state === "error" ? 503 : 400;
+  return res.status(statusCode).json(result);
+});
+
+app.get("/api/predictions", async (req: Request, res: Response) => {
+  const canonicalKey = typeof req.query.canonicalKey === "string" ? req.query.canonicalKey : "";
+  if (!canonicalKey) return res.status(400).json({ state: "invalid_request", reason: "canonicalKey_query_parameter_required" });
+  const result = await predictStoredFixture(canonicalKey);
+  const statusCode = result.state === "forecast_available" ? 200 :
+    result.state === "withheld" ? 422 : result.state === "unavailable" ? 503 :
+    result.state === "invalid_request" ? 400 : 503;
+  return res.status(statusCode).json(result);
+});
+
+app.post("/api/predictions/run", async (req: Request, res: Response) => {
+  const canonicalKey = typeof req.body?.canonicalKey === "string" ? req.body.canonicalKey : "";
+  if (!canonicalKey) return res.status(400).json({ state: "invalid_request", reason: "canonicalKey_required" });
+  const result = await predictStoredFixture(canonicalKey);
+  const statusCode = result.state === "forecast_available" ? 200 :
+    result.state === "withheld" ? 422 : result.state === "unavailable" ? 503 :
+    result.state === "invalid_request" ? 400 : 503;
+  return res.status(statusCode).json(result);
+});
+
 app.get("/api/fixtures", async (_req: Request, res: Response) => {
   const evidence = await getCanonicalEvidenceSummary();
   if (evidence.state !== "ready") {
@@ -505,6 +567,14 @@ app.get("/", (_req: Request, res: Response) => res.type("html").send(`<!doctype 
 <section class="card"><h2>Provider connections</h2><p class="muted">A configured secret is not proof that an API call works. Each provider remains disconnected until its contract, live response and data validation pass.</p><div id="providers">Loading provider status…</div></section>
 <section class="card" style="margin-top:14px"><h2>Run live fixture check</h2><p class="muted">This makes on-demand calls to SportAPI.ai, Sportmonks and API-Football if credentials are configured. Returned records remain unverified until canonical identity checks and persistence are connected.</p><div class="row"><label for="fixture-date">UTC calendar date</label><input id="fixture-date" type="date"><label for="provider-token">Diagnostics token (when configured)</label><input id="provider-token" type="password" autocomplete="off"><button id="fetch-fixtures">Check providers</button></div><pre id="fixture-check" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No provider check run yet.</pre></section>
 <section class="card" style="margin-top:14px"><h2>Favourite-team identity discovery</h2><p class="muted">Searches the 80 saved favourites in small, rate-limited batches. Exact name/alias plus matching country from both providers is required before a provider identity is confirmed. This does not create historical match results.</p><div class="row"><button id="discover-teams">Discover favourite teams</button><span id="team-discovery-progress" class="small">Not started</span></div><pre id="team-discovery-log" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">Ready when PostgreSQL and provider credentials are configured.</pre></section>
+<section class="card" style="margin-top:14px"><h2>Prediction engine</h2>
+<p class="muted">Select a canonical fixture key from <code>/api/fixtures</code>. The engine reads only verified historical results from PostgreSQL; it does not accept manually supplied statistics. Any missing evidence is reported as a withheld forecast.</p>
+<div class="row"><label for="prediction-fixture-key">Canonical fixture key</label><input id="prediction-fixture-key" type="text" placeholder="Paste canonical_key from /api/fixtures"><button id="run-prediction">Run forecast</button></div>
+<pre id="prediction-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No prediction requested.</pre>
+<p class="small">Team mappings must be reviewed and saved before forecasting. Enter the exact canonical fixture team name and a stable team ID that you have verified.</p>
+<div class="row"><label for="mapping-team-id">Reviewed team ID</label><input id="mapping-team-id" type="text" placeholder="Verified stable ID"><label for="mapping-canonical-name">Exact canonical name</label><input id="mapping-canonical-name" type="text" placeholder="Exact name from fixture"><label for="mapping-reviewed-by">Reviewed by</label><input id="mapping-reviewed-by" type="text" placeholder="Reviewer identifier"><button id="save-team-mapping">Save mapping</button></div>
+<pre id="mapping-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">Mappings require the diagnostics token in production.</pre>
+</section>
 <section class="card" style="margin-top:14px"><h2>Integrity rules</h2><ul><li>Unknown data stays unknown; it is never replaced with zero or a guess.</li><li>Conflicting fixture identity or results are flagged, not silently selected.</li><li>Forecast probabilities and betting decisions are separate.</li><li>No recommendations until verified data, calibration, fresh odds and risk gates pass.</li></ul><p class="small">This foundation is not yet a live prediction service. Status is intentionally honest.</p></section>
 <script>async function load(){try{const [p,f,h,s]=await Promise.all([fetch('/api/providers/status').then(r=>r.json()),fetch('/api/fixtures').then(r=>r.json()),fetch('/api/history/status').then(r=>r.json()),fetch('/api/storage/status').then(r=>r.json()).catch(()=>({state:'error',errorCode:'status_unavailable'}))]);document.getElementById('fixtures').textContent=f.count+' corroborated fixtures';document.getElementById('history').textContent=h.seededTeamNames+' teams · '+(h.canonicalTeamMappings||0)+' mapped · '+h.verifiedSettledResults+' verified results';document.getElementById('storage').textContent=s.state==='ready'?'Connected':s.state==='not_configured'?'Not configured':'Unavailable';document.getElementById('storage-detail').textContent=s.state==='ready'?s.observationCount+' observations saved':(s.errorCode||'Configure DATABASE_URL to persist observations');document.getElementById('providers').innerHTML=p.providers.map(x=>'<div class="row"><span><strong>'+x.name+'</strong><br><span class="small">'+x.priority+' · credential '+(x.credentialConfigured?'configured':'missing')+' · '+x.integrationState+'</span></span><span class="status">'+x.diagnostics.state+'</span></div>').join('')}catch(e){document.getElementById('providers').textContent='Status API unavailable.'}}document.getElementById('fixture-date').value=new Date().toISOString().slice(0,10);
 document.getElementById('discover-teams').addEventListener('click',async()=>{
@@ -532,6 +602,28 @@ document.getElementById('discover-teams').addEventListener('click',async()=>{
   load();
  }catch(e){progress.textContent='Error';log.textContent+='\\nDiscovery request failed; check server and database status.'}
  finally{button.disabled=false}
+});
+document.getElementById('run-prediction').addEventListener('click',async()=>{
+ const key=document.getElementById('prediction-fixture-key').value.trim(),out=document.getElementById('prediction-output');
+ if(!key){out.textContent='Enter a canonical fixture key from /api/fixtures.';return}
+ out.textContent='Loading verified history and running the model…';
+ try{
+  const response=await fetch('/api/predictions/run',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({canonicalKey:key})});
+  const data=await response.json();
+  if(data.state==='forecast_available'&&data.forecast){
+   const p=data.forecast;
+   out.textContent='FORECAST AVAILABLE — NOT A BETTING RECOMMENDATION\\nHome win: '+(p.homeWin*100).toFixed(2)+'%\\nDraw: '+(p.draw*100).toFixed(2)+'%\\nAway win: '+(p.awayWin*100).toFixed(2)+'%\\nEvidence state: '+p.evidenceState+'\\nHistorical rows loaded: '+data.historyRowsLoaded+'\\nHome/away samples: '+data.diagnostics.homeSamples+'/'+data.diagnostics.awaySamples+'\\nEvidence hash: '+data.evidenceHash+'\\nReason betting remains disabled: '+data.recommendationReason;
+  }else{out.textContent='PREDICTION WITHHELD\\n'+JSON.stringify(data,null,2)}
+ }catch(e){out.textContent='Prediction request failed. No probabilities are shown.'}
+});
+document.getElementById('save-team-mapping').addEventListener('click',async()=>{
+ const out=document.getElementById('mapping-output'),token=document.getElementById('provider-token').value;
+ const body={teamId:document.getElementById('mapping-team-id').value.trim(),canonicalName:document.getElementById('mapping-canonical-name').value.trim(),reviewedBy:document.getElementById('mapping-reviewed-by').value.trim()};
+ out.textContent='Saving reviewed mapping…';
+ try{
+  const response=await fetch('/api/predictions/team-mappings',{method:'POST',headers:{'content-type':'application/json',...(token?{'x-provider-diagnostics-token':token}:{})},body:JSON.stringify(body)});
+  const data=await response.json();out.textContent=JSON.stringify(data,null,2);
+ }catch(e){out.textContent='Mapping request failed. No mapping was confirmed.'}
 });
 document.getElementById('fetch-fixtures').addEventListener('click',async()=>{const date=document.getElementById('fixture-date').value;const out=document.getElementById('fixture-check');out.textContent='Checking providers…';try{const token=document.getElementById('provider-token').value;const r=await fetch('/api/providers/fixtures?date='+encodeURIComponent(date),{headers:token?{'x-provider-diagnostics-token':token}:{}});const data=await r.json();if(data.candidateCount!==undefined){out.textContent=JSON.stringify({state:data.state,date:data.date,candidateCount:data.candidateCount,canonicalFixturesCorroborated:data.canonicalFixturesCorroborated,verifiedResultsCreatedOrConfirmed:data.verifiedResultsCreatedOrConfirmed,conflictedGroups:data.conflictedGroups,canonicalEvidence:data.canonicalEvidence,persistence:data.persistence,cache:data.cache,cachedAt:data.cachedAt,retrievedAt:data.retrievedAt,candidateCountsByProvider:data.candidateCountsByProvider,candidateCountsByStatus:data.candidateCountsByStatus,reconciliationSummary:data.reconciliationSummary,providers:(data.providers||[]).map(p=>({name:p.name,state:p.diagnostics?.state,attemptedAt:p.diagnostics?.lastAttemptAt,succeededAt:p.diagnostics?.lastSuccessAt,records:p.diagnostics?.lastRecordCount,accepted:p.diagnostics?.lastAcceptedCount,rejected:p.diagnostics?.lastRejectedCount,rejectionReasons:p.diagnostics?.lastRejectionReasons,httpStatus:p.diagnostics?.lastHttpStatus,responseShape:p.diagnostics?.lastResponseShape,error:p.diagnostics?.lastErrorCode})),sampleCandidates:(data.sampleCandidates||[]).slice(0,5)},null,2);try{const s=await fetch('/api/storage/status').then(r=>r.json());document.getElementById('storage').textContent=s.state==='ready'?'Connected':s.state==='not_configured'?'Not configured':'Unavailable';document.getElementById('storage-detail').textContent=s.state==='ready'?s.observationCount+' observations saved':(s.errorCode||'Configure DATABASE_URL to persist observations')}catch{document.getElementById('storage-detail').textContent='Could not refresh storage status'}}else{out.textContent=JSON.stringify(data,null,2)}}catch(e){out.textContent='Provider check failed. Inspect server diagnostics.'}});load();</script>
 </main></body></html>`));

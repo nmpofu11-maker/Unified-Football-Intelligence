@@ -23,6 +23,20 @@ Monitor broadly, build deeper verified histories for the original 80 priority te
 - A separate odds/value assessment that withholds betting recommendations for uncalibrated forecasts, stale/missing odds or mismatched fixtures.
 - Seeded verbatim list of the original 80 tracked-team names at `src/data/initial-tracked-teams.json`. Provider IDs and aliases are intentionally unresolved rather than guessed.
 
+### Evidence-gated prediction API (new)
+
+The prediction path reads directly from PostgreSQL; it does not accept user-supplied averages or odds as model features.
+
+- `GET /api/predictions/status` — prediction ledger and mapping readiness.
+- `GET /api/predictions/team-mappings` — list explicitly reviewed canonical team mappings.
+- `POST /api/predictions/team-mappings` — save a reviewed mapping. In production, send the configured `x-provider-diagnostics-token` header. JSON body: `{"teamId":"your-reviewed-stable-id","canonicalName":"exact canonical fixture team name","reviewedBy":"reviewer identifier"}`.
+- `POST /api/predictions/run` — body `{"canonicalKey":"exact canonical key from /api/fixtures"}`.
+- `GET /api/predictions?canonicalKey=...` — same prediction operation via query string.
+
+The prediction route requires a corroborated, future scheduled fixture; exact reviewed mappings for both teams; and enough verified settled results from the **same competition** strictly before kickoff. It records a SHA-256 evidence hash and stores eligible forecasts in `prediction_ledger`. Missing evidence yields a withheld response rather than percentages.
+
+The Poisson baseline is explicitly marked uncalibrated. Forecast availability is not a betting recommendation; betting recommendations remain disabled until a genuinely out-of-sample calibration and evaluation pipeline passes separate gates. Team mappings are manual reviews, not automatic provider-ID discovery.
+
 ## Not yet production-ready
 
 - No database connection has yet been verified in the target environment. `DATABASE_URL` being present is not enough; `/api/storage/status` must report `state: "ready"`, and an ingestion/restart test must confirm durable rows.
