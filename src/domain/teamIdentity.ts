@@ -1,5 +1,5 @@
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
-import type { TeamSearchProviderResult } from "../providers/teamSearch.js";
+
 
 export interface TrackedTeamIdentity {
   id: string;
@@ -183,7 +183,10 @@ function observedSquadCategory(name: string): "women" | "youth" | "reserve" | "s
  */
 export function reviewTeamSearchCandidates(
   tracked: TrackedTeamIdentity,
-  providerResults: Array<Pick<TeamSearchProviderResult, "provider" | "candidates">>
+  providerResults: Array<{
+    provider: "api-football" | "sportmonks";
+    candidates: Array<{ providerTeamId: string; name: string; country?: string }>;
+  }>
 ): TeamSearchCandidateAssessment[] {
   const acceptedNames = namesFor(tracked);
   const expectedCategory = tracked.teamCategory;
