@@ -12,10 +12,12 @@
 - `GET /api/predictions/status` reports database schema readiness and counts for corroborated upcoming fixtures, verified settled results, provider observations, reviewed mappings and saved forecasts.
 - `GET /api/predictions/ledger?limit=20` returns a bounded read-only view of recent forecast records.
 - `GET /api/status` now reflects the current storage/prediction implementation rather than incorrectly claiming the ledger is not implemented.
+- Forecast generation fails closed when canonical fixture evidence is stale (default maximum age 180 minutes; configurable with `FIXTURE_EVIDENCE_MAX_AGE_MINUTES`).
+- An abstained forecast now returns `null` probabilities instead of misleading `0 / 0 / 0`; validation rejects partial-null probability triplets.
 
 ## CI verification
 
-The readiness and ledger API change was merged as `6e2d464eedfaae5532bce6944666cec7c0065154`. The status-contract correction was merged as `4065a8f8eef7c0880c1d18673c2db8a2a0b231fc`; the correction's pull-request head CI passed `npm run typecheck`, `npm test`, and `npm run build`. A separate CI result for the squash merge commit itself has not been confirmed here.
+The readiness and ledger API change was merged as `6e2d464eedfaae5532bce6944666cec7c0065154`. The status-contract correction was merged as `4065a8f8eef7c0880c1d18673c2db8a2a0b231fc`. The stale-fixture freshness gate was merged as `1e621263e169a36638a92a345e55fd953cbb4a7b`; its PR-head CI passed typecheck, tests and build. Null probabilities for abstentions were merged as `a0d8dbc4d03092734efa87452faaf6c4acbcfcbe`; PR-head CI run 530 passed typecheck, tests and build. Separate post-merge CI runs on the squash commits have not been confirmed here.
 
 ## Not yet verified in a live environment
 
