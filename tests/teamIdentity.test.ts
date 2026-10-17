@@ -177,3 +177,17 @@ test("rejects an exact-name search candidate when its country conflicts with the
     country: "France"
   }]);
 });
+
+
+test("preserves a unique single-provider identity when country metadata is missing", () => {
+  const results: TeamSearchProviderResult[] = [
+    { provider: "api-football", state: "success", candidates: [{ provider: "api-football", providerTeamId: "af-15", name: "15 de Agosto" }] },
+    { provider: "sportmonks", state: "success_empty", candidates: [] }
+  ];
+  const resolution = reconcileTeamSearchIdentity({ id: "team-15-agosto", canonicalName: "15 de Agosto" }, results);
+  assert.equal(resolution.state, "unresolved");
+  assert.deepEqual(resolution.identities, [{
+    provider: "api-football", providerTeamId: "af-15", providerName: "15 de Agosto"
+  }]);
+  assert.ok(resolution.reasons.includes("single_provider_identity_preserved_not_cross_provider_confirmed"));
+});
