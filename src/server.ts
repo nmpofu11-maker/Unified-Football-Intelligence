@@ -11,6 +11,7 @@ import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js"
 import { curatedTeamSearchAliases, discoverTrackedTeamIdentities, reviewTeamSearchCandidates } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
 import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
+import { listReviewedTeamMappings, predictStoredFixture, predictionStorageStatus, saveReviewedTeamMapping } from "./prediction/pipeline.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -435,6 +436,67 @@ app.get("/api/teams/watchlist", async (_req: Request, res: Response) => {
       canonicalMapping: mappingsById.get(team.id) ?? { trackedTeamId: team.id, canonicalName: team.canonicalName, state: "unresolved", providers: [] }
     }))
   });
+});
+
+app.get("/api/predictions/status", async (_req: Request, res: Response) => {
+  const status = await predictionStorageStatus();
+  const mappings = await listReviewedTeamMappings();
+  return res.status(status.state === "error" || mappings.state === "error" ? 503 : 200).json({
+    ...status,
+    teamMappingsState: mappings.state,
+    teamMappingCount: mappings.state === "ready" ? mappings.mappings.length : null,
+    predictionModel: "poisson-baseline",
+    calibratedForBetting: false,
+    bettingRecommendationsEnabled: false,
+    note: "A working data path is not proof of calibration. Forecasts are exploratory only; betting recommendations remain disabled."
+  });
+});
+
+app.get("/api/predictions/team-mappings", async (_req: Request, res: Response) => {
+  const result = await listReviewedTeamMappings();
+  return res.status(result.state === "error" ? 503 : 200).json({
+    ...result,
+    note: "Mappings are manually reviewed exact canonical names. No fuzzy matching or automatic identity guesses are used."
+  });
+});
+
+app.post("/api/predictions/team-mappings", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+  const body = req.body ?? {};
+  const result = await saveReviewedTeamMapping({
+    teamId: typeof body.teamId === "string" ? body.teamId : "",
+    canonicalName: typeof body.canonicalName === "string" ? body.canonicalName : "",
+    reviewedBy: typeof body.reviewedBy === "string" ? body.reviewedBy : ""
+  });
+  const statusCode = result.state === "saved" ? 201 : result.state === "conflict" ? 409 : 400;
+  return res.status(statusCode).json(result);
+});
+
+app.get("/api/predictions", async (req: Request, res: Response) => {
+  const canonicalKey = typeof req.query.canonicalKey === "string" ? req.query.canonicalKey : "";
+  if (!canonicalKey) return res.status(400).json({ state: "invalid_request", reason: "canonicalKey_query_parameter_required" });
+  const result = await predictStoredFixture(canonicalKey);
+  const statusCode = result.state === "forecast_available" ? 200 :
+    result.state === "withheld" ? 422 : result.state === "unavailable" ? 503 :
+    result.state === "invalid_request" ? 400 : 503;
+  return res.status(statusCode).json(result);
+});
+
+app.post("/api/predictions/run", async (req: Request, res: Response) => {
+  const canonicalKey = typeof req.body?.canonicalKey === "string" ? req.body.canonicalKey : "";
+  if (!canonicalKey) return res.status(400).json({ state: "invalid_request", reason: "canonicalKey_required" });
+  const result = await predictStoredFixture(canonicalKey);
+  const statusCode = result.state === "forecast_available" ? 200 :
+    result.state === "withheld" ? 422 : result.state === "unavailable" ? 503 :
+    result.state === "invalid_request" ? 400 : 503;
+  return res.status(statusCode).json(result);
 });
 
 app.get("/api/fixtures", async (_req: Request, res: Response) => {
