@@ -351,7 +351,6 @@ test("SportAPI identity review uses country and squad metadata, not name alone",
     provider: "sportapi-ai",
     state: "success",
     candidates: [{
-      provider: "sportapi-ai",
       providerTeamId: "ao-15-agosto",
       name: "15 de Agosto",
       country: "Angola",
@@ -368,7 +367,6 @@ test("SportAPI identity review uses country and squad metadata, not name alone",
     provider: "sportapi-ai",
     state: "success",
     candidates: [{
-      provider: "sportapi-ai",
       providerTeamId: "european-15-agosto",
       name: "15 de Agosto",
       country: "Portugal",
@@ -383,7 +381,6 @@ test("SportAPI identity review uses country and squad metadata, not name alone",
     provider: "sportapi-ai",
     state: "success",
     candidates: [{
-      provider: "sportapi-ai",
       providerTeamId: "unknown-category",
       name: "15 de Agosto",
       country: "Angola"
