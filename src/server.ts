@@ -438,7 +438,7 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
       return res.status(400).json({ state: "invalid_request", reason: "unknown_team_id", acceptedTeamIds: trackedTeams.map(team => team.id) });
     }
   } else {
-    if (!/^(0|[1-9]\\d*)$/.test(batchRaw)) return res.status(400).json({ state: "invalid_request", reason: "provide_teamIds_or_batch_index_starting_at_zero" });
+    if (!/^(0|[1-9]\d*)$/.test(batchRaw)) return res.status(400).json({ state: "invalid_request", reason: "provide_teamIds_or_batch_index_starting_at_zero" });
     const batch = Number(batchRaw);
     const batchCount = Math.ceil(teamSeed.teams.length / 5);
     if (!Number.isSafeInteger(batch) || batch >= batchCount) {
