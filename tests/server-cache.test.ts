@@ -51,6 +51,18 @@ test("fixture endpoint distinguishes fresh provider checks from cache hits", { t
   });
   try {
     await waitForHealth(`${baseUrl}/health`, child);
+    const dashboardResponse = await fetch(baseUrl);
+    const dashboardHtml = await dashboardResponse.text();
+    assert.equal(dashboardResponse.status, 200);
+    assert.ok(dashboardHtml.includes("saved discovery progress"), "dashboard should hydrate saved favourite-team search progress");
+
+    // Batch indices above zero must pass input validation; with isolated storage,
+    // the expected failure is the later database-readiness check, not invalid batch syntax.
+    const batchResponse = await fetch(`${baseUrl}/api/teams/provider-search?batch=1`);
+    const batchResult = await batchResponse.json() as Record<string, unknown>;
+    assert.equal(batchResponse.status, 503);
+    assert.notEqual(batchResult.reason, "provide_teamIds_or_batch_index_starting_at_zero");
+
     const endpoint = `${baseUrl}/api/providers/fixtures?date=2099-01-01`;
     const firstResponse = await fetch(endpoint);
     const first = await firstResponse.json() as Record<string, unknown>;
