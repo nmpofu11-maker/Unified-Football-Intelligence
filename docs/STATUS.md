@@ -16,6 +16,7 @@
 - Persistent ticket records and audited settlement events are available through authenticated APIs; pending tickets are re-evaluated after fresh result ingestion and lose immediately when a verified leg loses.
 - A bounded historical results ingestion endpoint accepts past UTC date ranges up to seven days and promotes only cross-provider-agreed finished scores.
 - An abstained forecast now returns `null` probabilities instead of misleading `0 / 0 / 0`; validation rejects partial-null probability triplets.
+- Chronological evaluation is available at `/api/evaluation/out-of-sample`; Brier score, log loss and accuracy stay null until at least 30 eligible pre-kickoff forecasts can be joined to later verified outcomes. This is descriptive evaluation, not calibration approval.
 
 ## CI verification
 
