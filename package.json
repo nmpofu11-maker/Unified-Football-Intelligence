@@ -13,7 +13,8 @@
     "test": "tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test",
     "build": "tsc",
-    "test:postgres": "tsx --test tests/postgres-integration.test.ts"
+    "test:postgres": "tsx --test tests/postgres-integration.test.ts",
+    "verify:live": "tsx scripts/verify-live-deployment.ts"
   },
   "dependencies": {
     "express": "^4.21.2",
