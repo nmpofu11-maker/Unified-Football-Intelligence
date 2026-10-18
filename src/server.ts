@@ -496,7 +496,7 @@ app.post("/api/teams/provider-search/next-batch", async (req: Request, res: Resp
   }
   const isRetryable = (team: (typeof before.teams)[number]) =>
     team.state === "never_searched" ||
-    team.providers.length < 2 ||
+    team.providers.filter(provider => provider.provider !== "sportapi-ai").length < 2 ||
     team.providers.some(provider =>
       provider.state === "request_error" || provider.state === "rate_limited" ||
       (provider.state === "success_empty" && provider.errorCode !== "team_search_strategy_v1_exhausted") ||
