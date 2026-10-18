@@ -9,7 +9,10 @@ import {
   getReviewedProviderTeamIdentityMap,
   saveReviewedSportApiTeamIdentityMapping,
   persistCanonicalEvidence,
-  persistProviderObservations
+  persistProviderObservations,
+  persistTeamSearchObservations,
+  saveReviewedSportApiTeamIdentityMapping,
+  getStoredTeamIdentityMappings
 } from "../src/storage/postgresObservations.js";
 import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
 import { createTicket, listTickets, reconcilePendingTickets } from "../src/tickets/store.js";
@@ -462,6 +465,79 @@ test("explicit SportAPI identity review persists an audited mapping only for a s
     await cleanupPool.query("DELETE FROM provider_identity_review_events WHERE tracked_team_id = $1", [trackedTeamId]).catch(() => undefined);
     await cleanupPool.query("DELETE FROM team_identity_mappings WHERE tracked_team_id = $1 AND provider = 'sportapi-ai'", [trackedTeamId]).catch(() => undefined);
     await cleanupPool.query("DELETE FROM team_search_observations WHERE tracked_team_id = $1 AND provider = 'sportapi-ai'", [trackedTeamId]).catch(() => undefined);
+    await cleanupPool.end();
+  }
+});
+
+
+test("SportAPI identity approval requires saved safe candidate context, prevents collisions and records an audit event", async (t) => {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");
+    return;
+  }
+
+  const suffix = randomUUID();
+  const trackedTeamId = `review-team-${suffix}`;
+  const secondTeamId = `review-team-second-${suffix}`;
+  const providerTeamId = `sportapi-team-${suffix}`;
+  const trackedTeams = [
+    { id: trackedTeamId, canonicalName: `Review Club ${suffix}`, country: "Angola", teamCategory: "senior" },
+    { id: secondTeamId, canonicalName: `Review Rival ${suffix}`, country: "Angola", teamCategory: "senior" }
+  ];
+  const cleanupPool = new Pool({ connectionString, max: 1 });
+  try {
+    const absent = await saveReviewedSportApiTeamIdentityMapping({
+      trackedTeamId, providerTeamId, reviewedBy: "integration-test"
+    }, trackedTeams);
+    assert.equal(absent.state, "candidate_not_found");
+
+    const persisted = await persistTeamSearchObservations([{
+      trackedTeamId,
+      canonicalName: trackedTeams[0]!.canonicalName,
+      providers: [{
+        provider: "sportapi-ai",
+        state: "success",
+        candidates: [{
+          providerTeamId,
+          name: trackedTeams[0]!.canonicalName,
+          country: "Angola",
+          gender: "male",
+          teamType: "senior",
+          league: "Girabola"
+        }]
+      }]
+    }]);
+    assert.equal(persisted.state, "saved");
+
+    const saved = await saveReviewedSportApiTeamIdentityMapping({
+      trackedTeamId, providerTeamId, reviewedBy: "integration-test"
+    }, trackedTeams);
+    assert.equal(saved.state, "saved");
+    assert.equal(saved.mapping?.providerTeamId, providerTeamId);
+    assert.equal(saved.mapping?.reviewedBy, "integration-test");
+
+    const mappings = await getStoredTeamIdentityMappings();
+    assert.equal(mappings.state, "ready");
+    const team = mappings.mappings.find(item => item.trackedTeamId === trackedTeamId);
+    assert.equal(team?.state, "confirmed");
+    assert.equal(team?.providers.find(item => item.provider === "sportapi-ai")?.providerIdentityState, "operator_reviewed");
+
+    const collision = await saveReviewedSportApiTeamIdentityMapping({
+      trackedTeamId: secondTeamId, providerTeamId, reviewedBy: "integration-test"
+    }, trackedTeams);
+    assert.equal(collision.state, "conflict");
+
+    const audit = await cleanupPool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM provider_identity_review_events
+       WHERE tracked_team_id = $1 AND provider = 'sportapi-ai' AND provider_team_id = $2 AND reviewed_by = $3`,
+      [trackedTeamId, providerTeamId, "integration-test"]
+    );
+    assert.equal(Number(audit.rows[0]?.count), 1);
+  } finally {
+    await cleanupPool.query("DELETE FROM provider_identity_review_events WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId]]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM team_identity_mappings WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId]]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM team_search_observations WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId]]).catch(() => undefined);
     await cleanupPool.end();
   }
 });
