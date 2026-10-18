@@ -33,6 +33,7 @@ The prediction path reads directly from PostgreSQL; it does not accept user-supp
 - `GET /api/evaluation/out-of-sample` — evaluates only eligible pre-kickoff forecasts against later verified settled results; metrics remain null until at least 30 unique eligible fixture/model/version samples are available. See `docs/EVALUATION.md`.
 - `GET /api/predictions/team-mappings` — list explicitly reviewed canonical team mappings.
 - `POST /api/predictions/team-mappings` — save a reviewed mapping. In production, send the configured `x-provider-diagnostics-token` header. JSON body: `{"teamId":"your-reviewed-stable-id","canonicalName":"exact canonical fixture team name","reviewedBy":"reviewer identifier"}`.
+- `GET /api/predictions/team-aliases` and `POST /api/predictions/team-aliases` — list or add a manually verified name variant for an existing team mapping. POST body: `{"teamId":"your-reviewed-stable-id","alias":"exact verified provider variant","reviewedBy":"reviewer identifier"}`. Matching ignores case and collapses repeated spaces only; abbreviations and similar names are not fuzzy-matched. Ambiguous mappings withhold the forecast.
 - `POST /api/predictions/run` — body `{"canonicalKey":"exact canonical key from /api/fixtures"}`.
 - `GET /api/predictions?canonicalKey=...` — same prediction operation via query string.
 
