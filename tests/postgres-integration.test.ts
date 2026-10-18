@@ -7,7 +7,6 @@ import {
   getObservationStoreStatus,
   getObservationStoreSummary,
   getReviewedProviderTeamIdentityMap,
-  saveReviewedSportApiTeamIdentityMapping,
   persistCanonicalEvidence,
   persistProviderObservations,
   persistTeamSearchObservations,
