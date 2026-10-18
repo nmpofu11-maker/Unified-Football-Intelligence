@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "check": "npm run typecheck && npm test",
-    "build": "tsc"
+    "build": "tsc",
+    "test:postgres": "tsx --test tests/postgres-integration.test.ts"
   },
   "dependencies": {
     "express": "^4.21.2",
