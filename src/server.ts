@@ -950,12 +950,15 @@ app.post("/api/tickets/import-betmatrix", async (req: Request, res: Response) =>
       results.push({ sourceTicketId: ticket.sourceTicketId, state: "rejected", reason: unresolvedReason ?? "ticket_selection_unresolved" });
       continue;
     }
+    const resolvedSelections = selections.filter(
+      (selection): selection is NonNullable<typeof selection> => selection !== null
+    );
 
     const saved = await createTicket({
       ticketId: `betmatrix:${ticket.sourceTicketId}`,
       stakeAmount: ticket.stakeAmount,
       potentialPayout: ticket.potentialPayout,
-      selections: selections as NonNullable<(typeof selections)[number]>[]
+      selections: resolvedSelections
     });
     if (saved.state === "saved") {
       imported++;
@@ -964,7 +967,7 @@ app.post("/api/tickets/import-betmatrix", async (req: Request, res: Response) =>
       const existing = await getTicketById(`betmatrix:${ticket.sourceTicketId}`);
       const existingSelections = existing.state === "ready" && existing.ticket && Array.isArray(existing.ticket.selections)
         ? existing.ticket.selections as Array<Record<string, unknown>> : [];
-      const sameSelections = existingSelections.length === selections.length && selections.every((selection, index) => {
+      const sameSelections = existingSelections.length === resolvedSelections.length && resolvedSelections.every((selection, index) => {
         const prior = existingSelections[index];
         return Boolean(prior) &&
           prior.selectionId === selection.selectionId &&
