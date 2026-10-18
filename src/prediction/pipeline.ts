@@ -6,7 +6,7 @@ import { checkFixtureFreshness } from "./freshness.js";
 type State = "ready" | "not_configured" | "error";
 
 /** Exact reviewed names are compared case-insensitively with whitespace collapsed; no fuzzy matching. */
-function normalizeTeamMappingKey(value: string): string {
+export function normalizeTeamMappingKey(value: string): string {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 const pool = new Pool({
