@@ -67,7 +67,7 @@ Raw observations are deliberately unverified. Use the protected history replay/r
 - Replay diagnostics should be checked for conflict reasons and stale records.
 - Confirm counts persist after restart/redeploy.
 
-This app has distinct provider team-search mappings and prediction-team mappings. Review and save the appropriate identity mapping explicitly; do not assume a catalogue candidate is an approved team ID.
+This app has separate provider-ID reconciliation and prediction-time canonical-name mappings. A provider candidate or catalogue result is not automatically a prediction mapping. The identity-gate migration adds `identity_reviewed = FALSE` to existing canonical rows; those legacy rows are retained for audit but excluded from forecasts, historical model inputs, out-of-sample evaluation and ticket settlement until the new pipeline safely rebuilds them. A replay that encounters unresolved provider IDs reports `snapshotReplacementSkipped` and preserves the existing snapshot rather than deleting evidence during partial identity review.
 
 ## 6. Verify prediction readiness without bypassing gates
 
