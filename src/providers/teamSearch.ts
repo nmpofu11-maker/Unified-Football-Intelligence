@@ -140,7 +140,7 @@ async function cachedSportApiJson(url: string, key: string, fetchImpl: typeof fe
   return value;
 }
 function countryKey(value: string): string {
-  return value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 function parseSportApiLeagueCatalogue(payload: unknown): Array<{id:string;name:string;country:string}> | null {
   const root = object(payload);
@@ -183,7 +183,7 @@ async function searchSportApiCatalogue(
   const provider = "sportapi-ai" as const;
   if (!key) return { provider, state: "unavailable", candidates: [], errorCode: "credential_not_configured" };
   try {
-    const base = (process.env.SPORTAPI_AI_BASE_URL || "https://sportapi.ai/api").replace(/\\/+$/, "");
+    const base = (process.env.SPORTAPI_AI_BASE_URL || "https://sportapi.ai/api").replace(/\/+$/, "");
     const raw = await cachedSportApiJson(base + "/leagues", key, fetchImpl, signal);
     const leagues = parseSportApiLeagueCatalogue(raw);
     if (!leagues) return { provider, state: "schema_error", candidates: [], errorCode: "unexpected_league_catalogue_shape" };
