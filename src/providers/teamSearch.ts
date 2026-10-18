@@ -203,7 +203,7 @@ async function searchSportApiCatalogue(
     });
     // Exact/related league names first; bounded country catalogue fallback helps
     // lower divisions without silently treating a missing league label as proof.
-    const selected = ranked.slice(0, wantedLeague && ranked.some(l => countryKey(l.name) === wantedLeague) ? 1 : 8);
+    const selected = ranked;
     const collected = new Map<string, TeamSearchCandidate>();
     for (const league of selected) {
       const payload = await cachedSportApiJson(base + "/leagues/" + encodeURIComponent(league.id), key, fetchImpl, signal);
