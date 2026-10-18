@@ -69,6 +69,14 @@ Raw observations are deliberately unverified. Use the protected history replay/r
 
 This app has separate provider-ID reconciliation and prediction-time canonical-name mappings. A provider candidate or catalogue result is not automatically a prediction mapping. The identity-gate migration adds `identity_reviewed = FALSE` to existing canonical rows; those legacy rows are retained for audit but excluded from forecasts, historical model inputs, out-of-sample evaluation and ticket settlement until the new pipeline safely rebuilds them. A replay that encounters unresolved API-Football/Sportmonks IDs that could participate in canonical matching reports `snapshotReplacementSkipped` and preserves the existing snapshot rather than deleting evidence during partial identity review. Unreviewed SportAPI fixture IDs are excluded from canonical matching and do not permanently block cleanup of a safe primary-provider snapshot; an operator-reviewed SportAPI ID can participate after passing the same identity gate.
 
+### Explicit SportAPI identity review
+
+- Only review a candidate from the latest saved successful SportAPI.ai search for the selected watchlist team.
+- The review path requires an exact or curated alias match, country agreement, and squad-category agreement. Missing country/category context is not treated as a match.
+- A confirmed provider ID cannot be assigned to another watchlist team or silently replaced. Each approval creates a durable `provider_identity_review_events` audit row.
+- `reviewed_by` is an operator-supplied audit label; it is not proof of an authenticated person's identity. In production, configure `PROVIDER_DIAGNOSTICS_TOKEN` and restrict it to trusted operators. The review endpoint is disabled outside development/test if that token is absent.
+- Operator approval establishes provider-team identity only. It does not independently corroborate a fixture, verify a result, create historical evidence, calibrate predictions, enable betting recommendations, or settle a ticket.
+
 ## 6. Verify prediction readiness without bypassing gates
 
 Inspect `/api/predictions/status`, `/api/predictions/ledger?limit=20`, and `/api/data-pipeline/status`. A forecast requires a corroborated fresh future fixture, reviewed exact team identities, and sufficient verified settled results from the same competition strictly before kickoff. The model must abstain with null probabilities when those conditions fail.
