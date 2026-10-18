@@ -28,9 +28,13 @@ export interface TicketSelection {
   sourceMetadata?: {
     sourceApp: "BetMatrix";
     sourceTicketId: string;
+    sourcePlatform?: string;
     sourceTicketStatus?: string;
     sourceTicketType?: string;
     sourcePlacedAt?: string;
+    sourceTotalOdds?: number;
+    sourceActualPayoutZar?: number;
+    sourceProfitZar?: number;
     sourceLegId?: string;
     sourceMarket: string;
     sourceTargetTeam?: string;
