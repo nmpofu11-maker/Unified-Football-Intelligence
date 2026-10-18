@@ -241,7 +241,7 @@ test("candidate review surfaces country conflict even when a women's alias and s
     {
       provider: "api-football",
       state: "success",
-      candidates: [{ providerTeamId: "19837", name: "Shelbourne W", country: "England" }]
+      candidates: [{ provider: "api-football", providerTeamId: "19837", name: "Shelbourne W", country: "England" }]
     },
     { provider: "sportmonks", state: "success_empty", candidates: [] }
   ];
@@ -264,9 +264,9 @@ test("classifies women's youth candidates separately from international youth wa
     state: "success",
     candidates: [
       { provider: "api-football", providerTeamId: "22723", name: "France U16", country: "France" },
-      { providerTeamId: "27109", name: "France U16 W", country: "France" },
-      { providerTeamId: "22724", name: "Japan U16", country: "Japan" },
-      { providerTeamId: "27134", name: "Japan U16 W", country: "Japan" }
+      { provider: "api-football", providerTeamId: "27109", name: "France U16 W", country: "France" },
+      { provider: "api-football", providerTeamId: "22724", name: "Japan U16", country: "Japan" },
+      { provider: "api-football", providerTeamId: "27134", name: "Japan U16 W", country: "Japan" }
     ]
   }];
   const france = reviewTeamSearchCandidates({
