@@ -637,7 +637,7 @@ app.post("/api/teams/provider-search/review-sportapi", async (req: Request, res:
     : 503;
   return res.status(statusCode).json({
     ...reviewed,
-    note: "An operator-reviewed SportAPI.ai provider ID may be used for canonical fixture identity matching only. This action does not verify any fixture, result, historical sample, forecast or ticket."
+    note: "An operator-reviewed SportAPI.ai provider ID may be used for canonical fixture identity matching only. The reviewedBy value is an operator-supplied audit label, not an independently authenticated account identity. This action does not verify any fixture, result, historical sample, forecast or ticket."
   });
 });
 
@@ -926,7 +926,7 @@ app.get("/", (_req: Request, res: Response) => res.type("html").send(`<!doctype 
 <section class="card" style="margin-top:14px"><h2>Review SportAPI.ai team identities</h2>
 <p class="muted">SportAPI.ai catalogue candidates are not auto-confirmed. Load the latest saved candidates, check the name, country and squad category, and explicitly approve one identity. This only enables fixture identity matching; it does not verify results or calibrate forecasts.</p>
 <div class="row"><label for="sportapi-review-team">Favourite team</label><select id="sportapi-review-team">${teamSeed.teams.map(team => '<option value="' + escapeHtml(team.id) + '">' + escapeHtml(team.canonicalName) + ' — ' + escapeHtml(team.country ?? "Country unknown") + '</option>').join("")}</select><button id="load-sportapi-candidates">Load saved candidates</button><button id="replay-reviewed-observations">Replay stored observations</button></div>
-<div class="row"><label for="sportapi-review-candidate">SportAPI.ai candidate</label><select id="sportapi-review-candidate"><option value="">Load candidates first</option></select><label for="sportapi-reviewer">Reviewer identifier</label><input id="sportapi-reviewer" type="text" maxlength="160" placeholder="Your initials or reviewer ID"><button id="confirm-sportapi-candidate">Confirm identity</button></div>
+<div class="row"><label for="sportapi-review-candidate">SportAPI.ai candidate</label><select id="sportapi-review-candidate"><option value="">Load candidates first</option></select><label for="sportapi-reviewer">Reviewer audit label</label><input id="sportapi-reviewer" type="text" maxlength="160" placeholder="Your initials or reviewer ID"><button id="confirm-sportapi-candidate">Confirm identity</button></div>
 <pre id="sportapi-review-log" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No SportAPI identity review loaded yet.</pre></section>
 <section class="card" style="margin-top:14px"><h2>Prediction engine</h2>
 <p class="muted">Select a canonical fixture key from <code>/api/fixtures</code>. The engine reads only verified historical results from PostgreSQL; it does not accept manually supplied statistics. Any missing evidence is reported as a withheld forecast.</p>
