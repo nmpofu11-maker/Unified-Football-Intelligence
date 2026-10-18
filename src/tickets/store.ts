@@ -96,6 +96,241 @@ export async function createTicket(input: CreateTicketInput) {
   }
 }
 
+type BetMatrixImportLeg = {
+  id?: unknown; homeTeam?: unknown; awayTeam?: unknown; targetTeam?: unknown;
+  market?: unknown; odds?: unknown; league?: unknown; kickoffISO?: unknown;
+  apiFootballFixtureId?: unknown; sportApiFixtureId?: unknown; theRundownId?: unknown;
+};
+type BetMatrixImportTicket = {
+  id?: unknown; placedAt?: unknown; type?: unknown; status?: unknown; platform?: unknown;
+  stakeZar?: unknown; potentialPayoutZar?: unknown; actualPayoutZar?: unknown;
+  totalOdds?: unknown; profitZar?: unknown; legs?: unknown;
+};
+type ImportableCanonicalFixture = {
+  canonical_key: string; kickoff_utc: Date; home_name: string; away_name: string;
+  competition_name: string; status: string;
+};
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function importString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+function normaliseImportLabel(value: string): string {
+  return value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "")
+    .toLowerCase().replace(/\\b(fc|afc|sc|cf)\\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+}
+function parseBetMatrixMarket(
+  leg: BetMatrixImportLeg,
+  sourceHomeTeam: string,
+  sourceAwayTeam: string
+): { market: TicketMarket; pick: TicketPick; line?: number } | { reason: string } {
+  const market = importString(leg.market) ?? "";
+  const target = importString(leg.targetTeam) ?? "";
+  const raw = (market + " " + target).toLowerCase().replace(/[_-]+/g, " ");
+  const marketNorm = normaliseImportLabel(market);
+  const targetNorm = normaliseImportLabel(target);
+  const cleanTarget = targetNorm.replace(/\\b(win|wins|winner|to win)\\b/g, " ").trim().replace(/\\s+/g, " ");
+
+  if (/both teams to score|\\bbtts\\b/.test(raw)) {
+    if (/\\b(no|not|false)\\b/.test(target.toLowerCase())) return { market: "btts", pick: "no" };
+    if (/\\b(yes|true)\\b/.test(target.toLowerCase())) return { market: "btts", pick: "yes" };
+    if (/\\bbtts no\\b/.test(raw)) return { market: "btts", pick: "no" };
+    if (/\\bbtts yes\\b/.test(raw)) return { market: "btts", pick: "yes" };
+    return { reason: "btts_selection_must_explicitly_say_yes_or_no" };
+  }
+  if (/double chance/.test(marketNorm)) {
+    if (/\\b1x\\b|home or draw|home\\/draw|1 or x/.test(raw)) return { market: "double_chance", pick: "home_draw" };
+    if (/\\bx2\\b|draw or away|draw\\/away|x or 2/.test(raw)) return { market: "double_chance", pick: "draw_away" };
+    if (/\\b12\\b|home or away|home\\/away|1 or 2/.test(raw)) return { market: "double_chance", pick: "home_away" };
+    const home = normaliseImportLabel(sourceHomeTeam);
+    const away = normaliseImportLabel(sourceAwayTeam);
+    if (targetNorm.includes(home) && /draw/.test(raw)) return { market: "double_chance", pick: "home_draw" };
+    if (targetNorm.includes(away) && /draw/.test(raw)) return { market: "double_chance", pick: "draw_away" };
+    if (targetNorm.includes(home) && targetNorm.includes(away)) return { market: "double_chance", pick: "home_away" };
+    return { reason: "unsupported_or_ambiguous_double_chance_pick" };
+  }
+  if (/draw no bet/.test(marketNorm)) {
+    if (/\\b(home|1)\\b/.test(target.toLowerCase()) || cleanTarget === normaliseImportLabel(sourceHomeTeam)) return { market: "draw_no_bet", pick: "home" };
+    if (/\\b(away|2)\\b/.test(target.toLowerCase()) || cleanTarget === normaliseImportLabel(sourceAwayTeam)) return { market: "draw_no_bet", pick: "away" };
+    return { reason: "draw_no_bet_pick_must_identify_home_or_away_team" };
+  }
+  if (/over.?under|total goals|goals over|goals under|\\bo\\/u\\b/.test(raw)) {
+    const numbers = raw.match(/\\d+(?:\\.\\d+)?/g) ?? [];
+    const line = numbers.length ? Number(numbers[numbers.length - 1]) : Number.NaN;
+    if (!Number.isFinite(line) || line < 0) return { reason: "total_goals_line_missing_or_invalid" };
+    const targetLower = target.toLowerCase();
+    const over = /\\bover\\b/.test(targetLower) || (/\\bover\\b/.test(market.toLowerCase()) && !/\\bunder\\b/.test(market.toLowerCase()));
+    const under = /\\bunder\\b/.test(targetLower) || (/\\bunder\\b/.test(market.toLowerCase()) && !/\\bover\\b/.test(market.toLowerCase()));
+    if (over === under) return { reason: "total_goals_pick_must_explicitly_say_over_or_under" };
+    return { market: "total_goals", pick: over ? "over" : "under", line };
+  }
+  if (/1x2|match result|full.?time result|match winner|moneyline|\\bwinner\\b|\\bresult\\b|\\bfull time\\b/.test(marketNorm)) {
+    if (/\\b(draw|tie|x)\\b/.test(target.toLowerCase()) || targetNorm === "x") return { market: "1x2", pick: "draw" };
+    if (/\\bhome\\b/.test(target.toLowerCase()) || cleanTarget === "1") return { market: "1x2", pick: "home" };
+    if (/\\baway\\b/.test(target.toLowerCase()) || cleanTarget === "2") return { market: "1x2", pick: "away" };
+    if (cleanTarget === normaliseImportLabel(sourceHomeTeam)) return { market: "1x2", pick: "home" };
+    if (cleanTarget === normaliseImportLabel(sourceAwayTeam)) return { market: "1x2", pick: "away" };
+    return { reason: "match_result_pick_does_not_match_either_fixture_team_or_draw" };
+  }
+  return { reason: "unsupported_betmatrix_market" };
+}
+function invertImportedPick(selection: { market: TicketMarket; pick: TicketPick; line?: number }): { market: TicketMarket; pick: TicketPick; line?: number } {
+  if ((selection.market === "1x2" || selection.market === "draw_no_bet") && selection.pick === "home") return { ...selection, pick: "away" };
+  if ((selection.market === "1x2" || selection.market === "draw_no_bet") && selection.pick === "away") return { ...selection, pick: "home" };
+  if (selection.market === "double_chance" && selection.pick === "home_draw") return { ...selection, pick: "draw_away" };
+  if (selection.market === "double_chance" && selection.pick === "draw_away") return { ...selection, pick: "home_draw" };
+  return selection;
+}
+
+/** Import only BetMatrix tickets. Source odds/status and learned matrices are never model inputs or trusted settlement evidence. */
+export async function importBetMatrixBackup(payload: unknown) {
+  if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const, reason: "database_not_configured" };
+  if (!isRecord(payload) || !Array.isArray(payload.tickets) || payload.tickets.length < 1 || payload.tickets.length > 500) {
+    return { state: "invalid_input" as const, reason: "betmatrix_backup_must_contain_between_1_and_500_tickets" };
+  }
+  const canonicalState = await getCanonicalEvidenceSummary();
+  if (canonicalState.state !== "ready") {
+    return { state: canonicalState.state === "not_configured" ? "not_configured" as const : "error" as const, reason: canonicalState.errorCode ?? "canonical_evidence_not_ready" };
+  }
+
+  const tickets = payload.tickets as BetMatrixImportTicket[];
+  const kickoffValues: string[] = [];
+  let totalLegs = 0;
+  for (const ticket of tickets) {
+    if (!isRecord(ticket) || !Array.isArray(ticket.legs)) continue;
+    totalLegs += ticket.legs.length;
+    for (const rawLeg of ticket.legs) {
+      if (!isRecord(rawLeg)) continue;
+      const kickoff = importString(rawLeg.kickoffISO);
+      if (kickoff && Number.isFinite(Date.parse(kickoff)) && /(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(kickoff)) kickoffValues.push(new Date(kickoff).toISOString());
+    }
+  }
+  if (totalLegs > 5000) return { state: "invalid_input" as const, reason: "backup_exceeds_5000_total_legs" };
+  const uniqueKickoffs = [...new Set(kickoffValues)];
+  let fixtures: ImportableCanonicalFixture[] = [];
+  if (uniqueKickoffs.length) {
+    const fixtureRows = await pool.query<ImportableCanonicalFixture>(`
+      SELECT canonical_key, kickoff_utc, home_name, away_name, competition_name, status
+      FROM canonical_fixture_evidence f
+      WHERE identity_reviewed = TRUE AND evidence_state = 'corroborated'
+        AND status IN ('scheduled','live','finished')
+        AND NOT (status = 'live' AND kickoff_utc < NOW() - INTERVAL '6 hours')
+        AND EXISTS (
+          SELECT 1 FROM unnest($1::timestamptz[]) AS requested(kickoff)
+          WHERE f.kickoff_utc BETWEEN requested.kickoff - INTERVAL '36 hours'
+                                  AND requested.kickoff + INTERVAL '36 hours'
+        )
+    `, [uniqueKickoffs]);
+    fixtures = fixtureRows.rows;
+  }
+
+  const imported: Array<{ sourceTicketId: string; ticketId: string; selections: number; state: string }> = [];
+  const rejected: Array<{ sourceTicketId?: string; reason: string; legIndex?: number }> = [];
+  const skipped: Array<{ sourceTicketId: string; reason: string }> = [];
+  const sourcePlatform = importString(payload.platform) ?? "Hollywoodbets BetMatrix AI";
+
+  for (const ticket of tickets) {
+    const sourceTicketId = importString(ticket?.id);
+    if (!sourceTicketId || !Array.isArray(ticket?.legs) || ticket.legs.length === 0 || ticket.legs.length > 100) {
+      rejected.push({ ...(sourceTicketId ? { sourceTicketId } : {}), reason: "ticket_id_and_1_to_100_legs_required" });
+      continue;
+    }
+    if (typeof ticket.stakeZar !== "number" || !Number.isFinite(ticket.stakeZar) || ticket.stakeZar < 0 ||
+        typeof ticket.potentialPayoutZar !== "number" || !Number.isFinite(ticket.potentialPayoutZar) || ticket.potentialPayoutZar < 0) {
+      rejected.push({ sourceTicketId, reason: "valid_stake_and_potential_payout_required" });
+      continue;
+    }
+
+    const selections: TicketSelection[] = [];
+    let legFailure: { reason: string; legIndex: number } | undefined;
+    for (let index = 0; index < ticket.legs.length; index++) {
+      const rawLeg = ticket.legs[index];
+      if (!isRecord(rawLeg)) { legFailure = { reason: "invalid_leg_shape", legIndex: index }; break; }
+      const leg = rawLeg as BetMatrixImportLeg;
+      const homeTeam = importString(leg.homeTeam);
+      const awayTeam = importString(leg.awayTeam);
+      const kickoffISO = importString(leg.kickoffISO);
+      const market = importString(leg.market);
+      const targetTeam = importString(leg.targetTeam) ?? "";
+      const league = importString(leg.league);
+      if (!homeTeam || !awayTeam || !market) { legFailure = { reason: "home_away_and_market_required", legIndex: index }; break; }
+      if (!kickoffISO || !Number.isFinite(Date.parse(kickoffISO)) || !/(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(kickoffISO)) {
+        legFailure = { reason: "fixture_kickoff_required_as_timezone_aware_iso", legIndex: index }; break;
+      }
+
+      const sourceKickoff = Date.parse(kickoffISO);
+      const homeKey = normaliseImportLabel(homeTeam);
+      const awayKey = normaliseImportLabel(awayTeam);
+      const leagueKey = league ? normaliseImportLabel(league) : "";
+      const matches = fixtures.flatMap(fixture => {
+        const canonicalHome = normaliseImportLabel(fixture.home_name);
+        const canonicalAway = normaliseImportLabel(fixture.away_name);
+        const same = canonicalHome === homeKey && canonicalAway === awayKey;
+        const reversed = canonicalHome === awayKey && canonicalAway === homeKey;
+        const kickoff = Date.parse(fixture.kickoff_utc.toString());
+        const leagueMatches = !leagueKey || normaliseImportLabel(fixture.competition_name) === leagueKey;
+        return (same || reversed) && leagueMatches && Number.isFinite(kickoff) && Math.abs(kickoff - sourceKickoff) <= 36 * 60 * 60 * 1000
+          ? [{ fixture, reversed }] : [];
+      });
+      if (matches.length === 0) { legFailure = { reason: "no_unique_identity_gated_fixture_matches_exact_teams_competition_and_kickoff", legIndex: index }; break; }
+      if (matches.length > 1) { legFailure = { reason: "ambiguous_canonical_fixture_match", legIndex: index }; break; }
+
+      const parsed = parseBetMatrixMarket(leg, homeTeam, awayTeam);
+      if ("reason" in parsed) { legFailure = { reason: parsed.reason, legIndex: index }; break; }
+      const mapped = matches[0]!.reversed ? invertImportedPick(parsed) : parsed;
+      const odds = typeof leg.odds === "number" && Number.isFinite(leg.odds) && leg.odds > 0 ? leg.odds : undefined;
+      selections.push({
+        selectionId: sourceTicketId + ":" + (importString(leg.id) ?? String(index + 1)),
+        fixtureId: matches[0]!.fixture.canonical_key,
+        market: mapped.market,
+        pick: mapped.pick,
+        ...(mapped.market === "total_goals" && mapped.line !== undefined ? { line: mapped.line } : {}),
+        sourceMetadata: {
+          sourceApp: "BetMatrix",
+          sourceTicketId,
+          sourcePlatform: importString(ticket.platform) ?? sourcePlatform,
+          ...(importString(ticket.status) ? { sourceTicketStatus: importString(ticket.status)! } : {}),
+          ...(importString(ticket.type) ? { sourceTicketType: importString(ticket.type)! } : {}),
+          ...(importString(ticket.placedAt) ? { sourcePlacedAt: importString(ticket.placedAt)! } : {}),
+          ...(typeof ticket.totalOdds === "number" && Number.isFinite(ticket.totalOdds) ? { sourceTotalOdds: ticket.totalOdds } : {}),
+          ...(typeof ticket.actualPayoutZar === "number" && Number.isFinite(ticket.actualPayoutZar) ? { sourceActualPayoutZar: ticket.actualPayoutZar } : {}),
+          ...(typeof ticket.profitZar === "number" && Number.isFinite(ticket.profitZar) ? { sourceProfitZar: ticket.profitZar } : {}),
+          ...(importString(leg.id) ? { sourceLegId: importString(leg.id)! } : {}),
+          sourceMarket: market,
+          ...(targetTeam ? { sourceTargetTeam: targetTeam } : {}),
+          ...(odds !== undefined ? { sourceOdds: odds } : {}),
+          sourceHomeTeam: homeTeam,
+          sourceAwayTeam: awayTeam,
+          ...(league ? { sourceLeague: league } : {}),
+          sourceKickoffISO: kickoffISO,
+          sourceProviderFixtureIds: {
+            ...(leg.apiFootballFixtureId !== undefined ? { apiFootball: String(leg.apiFootballFixtureId) } : {}),
+            ...(leg.sportApiFixtureId !== undefined ? { sportApi: String(leg.sportApiFixtureId) } : {}),
+            ...(leg.theRundownId !== undefined ? { theRundown: String(leg.theRundownId) } : {})
+          }
+        }
+      });
+    }
+    if (legFailure) { rejected.push({ sourceTicketId, ...legFailure }); continue; }
+
+    const ticketId = "betmatrix:" + sourceTicketId;
+    const saved = await createTicket({ ticketId, stakeAmount: ticket.stakeZar, potentialPayout: ticket.potentialPayoutZar, selections });
+    if (saved.state === "saved") imported.push({ sourceTicketId, ticketId, selections: selections.length, state: "imported" });
+    else if (saved.state === "conflict") skipped.push({ sourceTicketId, reason: "ticket_already_imported" });
+    else rejected.push({ sourceTicketId, reason: saved.reason ?? "ticket_store_unavailable" });
+  }
+
+  const settlement = imported.length ? await reconcilePendingTickets() : undefined;
+  return {
+    state: "ready" as const, sourceApp: "BetMatrix",
+    importedCount: imported.length, skippedCount: skipped.length, rejectedCount: rejected.length,
+    imported, skipped, rejected, ...(settlement ? { settlement } : {}),
+    note: "Imported source ticket statuses and odds are audit metadata only. Every imported ticket starts pending and is settled by this app only from identity-gated, verified canonical results. Unsupported markets or ambiguous fixtures are rejected, not guessed."
+  };
+}
+
 export async function listTickets(limit = 50) {
   if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const, tickets: [] };
   const boundedLimit = Number.isInteger(limit) ? Math.max(1, Math.min(100, limit)) : 50;
