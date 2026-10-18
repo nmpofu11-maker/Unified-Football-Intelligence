@@ -12,7 +12,10 @@ import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
 
 test("PostgreSQL persists raw observations idempotently without promoting them to verified evidence", async (t) => {
   const connectionString = process.env.DATABASE_URL?.trim();
-  if (!connectionString) {\n    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");\n    return;\n  }
+  if (!connectionString) {
+    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");
+    return;
+  }
 
   const fixtureId = `ci-integration-${randomUUID()}`;
   const observedAt = new Date().toISOString();
