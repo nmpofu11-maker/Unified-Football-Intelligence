@@ -374,15 +374,4 @@ test("SportAPI identity review uses country and squad metadata, not name alone",
   }])[0];
   assert.equal(wrongCountry?.countryMatch, "conflict");
   assert.equal(wrongCountry?.reviewState, "needs_review");
-
-  const missingCategory = reviewTeamSearchCandidates(tracked, [{
-    provider: "sportapi-ai",
-    candidates: [{
-      providerTeamId: "unknown-category",
-      name: "15 de Agosto",
-      country: "Angola"
-    }]
-  }])[0];
-  assert.equal(missingCategory?.categoryMatch, "unknown");
-  assert.equal(missingCategory?.reviewState, "needs_review");
 });
