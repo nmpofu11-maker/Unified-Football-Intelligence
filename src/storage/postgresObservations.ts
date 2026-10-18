@@ -996,6 +996,173 @@ export interface TeamIdentityMappingReconciliationSummary {
 }
 
 /** Reconciles latest provider searches using exact/curated names plus matching country from both providers. */
+export async function saveReviewedSportApiTeamIdentityMapping(
+  input: { trackedTeamId: string; providerTeamId: string; reviewedBy: string },
+  trackedTeams: TrackedTeamIdentity[]
+): Promise<{
+  state: "saved" | "invalid_input" | "candidate_not_found" | "unsafe_candidate" | "conflict" | "not_configured" | "error";
+  reason?: string;
+  mapping?: { trackedTeamId: string; provider: "sportapi-ai"; providerTeamId: string; providerTeamName: string; country: string; reviewedBy: string; reviewedAt: string };
+}> {
+  const trackedTeamId = input.trackedTeamId.trim();
+  const providerTeamId = input.providerTeamId.trim();
+  const reviewedBy = input.reviewedBy.trim();
+  if (!trackedTeamId || !providerTeamId || !reviewedBy) {
+    return { state: "invalid_input", reason: "trackedTeamId_providerTeamId_and_reviewedBy_are_required" };
+  }
+  if ([trackedTeamId, providerTeamId, reviewedBy].some(value => value.length > 200 || /[\\r\\n\\t]/.test(value))) {
+    return { state: "invalid_input", reason: "mapping_fields_too_long_or_contain_control_characters" };
+  }
+  const tracked = trackedTeams.find(team => team.id === trackedTeamId);
+  if (!tracked) return { state: "invalid_input", reason: "tracked_team_not_found_in_watchlist" };
+  if (!tracked.country?.trim() || !tracked.teamCategory?.trim()) {
+    return { state: "unsafe_candidate", reason: "watchlist_country_and_squad_category_are_required_for_provider_identity_review" };
+  }
+
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", reason: "database_not_configured" };
+  let client: PoolClient | undefined;
+  let transactionOpen = false;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    const candidateResult = await client.query<{
+      provider_team_name: string;
+      country: string | null;
+      gender: string | null;
+      team_type: string | null;
+      league: string | null;
+      searched_at: Date;
+    }>(`
+      SELECT s.provider_team_name, s.country, s.gender, s.team_type, s.league, s.searched_at
+      FROM team_search_observations s
+      WHERE s.tracked_team_id = $1
+        AND s.provider = 'sportapi-ai'
+        AND s.provider_team_id = $2
+        AND s.search_state = 'success'
+        AND s.searched_at = (
+          SELECT MAX(latest.searched_at) FROM team_search_observations latest
+          WHERE latest.tracked_team_id = $1 AND latest.provider = 'sportapi-ai'
+        )
+      ORDER BY s.provider_team_id
+      LIMIT 1
+    `, [trackedTeamId, providerTeamId]);
+    const candidate = candidateResult.rows[0];
+    if (!candidate) return { state: "candidate_not_found", reason: "candidate_not_in_latest_saved_sportapi_search_for_this_watchlist_team" };
+
+    const assessment = reviewTeamSearchCandidates(tracked, [{
+      provider: "sportapi-ai",
+      candidates: [{
+        providerTeamId,
+        name: candidate.provider_team_name,
+        ...(candidate.country ? { country: candidate.country } : {}),
+        ...(candidate.gender ? { gender: candidate.gender } : {}),
+        ...(candidate.team_type ? { teamType: candidate.team_type } : {}),
+        ...(candidate.league ? { league: candidate.league } : {})
+      }]
+    }])[0];
+    if (!assessment || assessment.nameMatch === "unrelated_search_result") {
+      return { state: "unsafe_candidate", reason: "candidate_name_is_not_an_exact_or_curated_watchlist_alias" };
+    }
+    if (assessment.countryMatch !== "match") {
+      return { state: "unsafe_candidate", reason: "candidate_country_must_match_watchlist_country" };
+    }
+    if (assessment.categoryMatch !== "match") {
+      return { state: "unsafe_candidate", reason: "candidate_squad_category_must_match_watchlist_category" };
+    }
+
+    await client.query("BEGIN");
+    transactionOpen = true;
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`sportapi-ai:${providerTeamId}`]);
+    const collision = await client.query(
+      `SELECT tracked_team_id FROM team_identity_mappings
+       WHERE provider = 'sportapi-ai' AND provider_team_id = $1
+         AND mapping_state = 'confirmed' AND tracked_team_id <> $2
+       LIMIT 1`,
+      [providerTeamId, trackedTeamId]
+    );
+    if (collision.rowCount) {
+      await client.query("ROLLBACK");
+      transactionOpen = false;
+      return { state: "conflict", reason: "provider_team_id_is_already_confirmed_for_another_watchlist_team" };
+    }
+    const existing = await client.query<{
+      provider_team_id: string | null;
+      mapping_state: string;
+      provider_identity_state: string;
+    }>(
+      `SELECT provider_team_id, mapping_state, provider_identity_state
+       FROM team_identity_mappings
+       WHERE tracked_team_id = $1 AND provider = 'sportapi-ai'
+       FOR UPDATE`,
+      [trackedTeamId]
+    );
+    const prior = existing.rows[0];
+    if (prior?.mapping_state === "confirmed" && prior.provider_team_id && prior.provider_team_id !== providerTeamId) {
+      await client.query("ROLLBACK");
+      transactionOpen = false;
+      return { state: "conflict", reason: "watchlist_team_already_has_a_different_confirmed_sportapi_identity" };
+    }
+
+    const reasons = ["operator_reviewed_candidate", ...assessment.reasons];
+    const saved = await client.query<{
+      tracked_team_id: string;
+      provider_team_id: string;
+      provider_team_name: string;
+      country: string;
+    }>(`
+      INSERT INTO team_identity_mappings
+        (tracked_team_id, canonical_name, provider, mapping_state, provider_identity_state,
+         provider_team_id, provider_team_name, country, reasons, source_search_at, updated_at)
+      VALUES ($1,$2,'sportapi-ai','confirmed','operator_reviewed',$3,$4,$5,$6,$7,NOW())
+      ON CONFLICT (tracked_team_id, provider) DO UPDATE SET
+        canonical_name = EXCLUDED.canonical_name,
+        mapping_state = 'confirmed',
+        provider_identity_state = 'operator_reviewed',
+        provider_team_id = EXCLUDED.provider_team_id,
+        provider_team_name = EXCLUDED.provider_team_name,
+        country = EXCLUDED.country,
+        reasons = EXCLUDED.reasons,
+        source_search_at = EXCLUDED.source_search_at,
+        updated_at = NOW()
+      WHERE team_identity_mappings.provider_team_id IS NULL
+         OR team_identity_mappings.provider_team_id = EXCLUDED.provider_team_id
+         OR team_identity_mappings.mapping_state <> 'confirmed'
+      RETURNING tracked_team_id, provider_team_id, provider_team_name, country
+    `, [trackedTeamId, tracked.canonicalName, providerTeamId, candidate.provider_team_name, candidate.country, reasons, candidate.searched_at]);
+    if (!saved.rowCount) {
+      await client.query("ROLLBACK");
+      transactionOpen = false;
+      return { state: "conflict", reason: "existing_confirmed_provider_identity_cannot_be_silently_reassigned" };
+    }
+    const event = await client.query<{ reviewed_at: Date }>(`
+      INSERT INTO provider_identity_review_events
+        (tracked_team_id, provider, provider_team_id, provider_team_name, reviewed_by, action, reasons)
+      VALUES ($1,'sportapi-ai',$2,$3,$4,'confirmed',$5)
+      RETURNING reviewed_at
+    `, [trackedTeamId, providerTeamId, candidate.provider_team_name, reviewedBy, reasons]);
+    await client.query("COMMIT");
+    transactionOpen = false;
+    return {
+      state: "saved",
+      mapping: {
+        trackedTeamId: saved.rows[0]!.tracked_team_id,
+        provider: "sportapi-ai",
+        providerTeamId: saved.rows[0]!.provider_team_id,
+        providerTeamName: saved.rows[0]!.provider_team_name,
+        country: saved.rows[0]!.country,
+        reviewedBy,
+        reviewedAt: event.rows[0]!.reviewed_at.toISOString()
+      }
+    };
+  } catch (error) {
+    if (client && transactionOpen) await client.query("ROLLBACK").catch(() => undefined);
+    return { state: "error", reason: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
 export async function reconcileStoredTeamSearchCandidates(
   trackedTeams: TrackedTeamIdentity[]
 ): Promise<TeamIdentityMappingReconciliationSummary> {
