@@ -745,6 +745,9 @@ app.get("/", (_req: Request, res: Response) => res.type("html").send(`<!doctype 
 <p class="small">Team mappings must be reviewed and saved before forecasting. Enter the exact canonical fixture team name and a stable team ID that you have verified.</p>
 <div class="row"><label for="mapping-team-id">Reviewed team ID</label><input id="mapping-team-id" type="text" placeholder="Verified stable ID"><label for="mapping-canonical-name">Exact canonical name</label><input id="mapping-canonical-name" type="text" placeholder="Exact name from fixture"><label for="mapping-reviewed-by">Reviewed by</label><input id="mapping-reviewed-by" type="text" placeholder="Reviewer identifier"><button id="save-team-mapping">Save mapping</button></div>
 <pre id="mapping-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">Mappings require the diagnostics token in production.</pre>
+<p class="small">If a provider spells the same club differently, add the variant only after you have verified that it is the same team. Aliases are exact reviewed mappings, not fuzzy guesses.</p>
+<div class="row"><label for="alias-team-id">Existing reviewed team ID</label><input id="alias-team-id" type="text" placeholder="Same stable team ID"><label for="alias-name">Verified name variant</label><input id="alias-name" type="text" placeholder="Exact provider variant"><label for="alias-reviewed-by">Reviewed by</label><input id="alias-reviewed-by" type="text" placeholder="Reviewer identifier"><button id="save-team-alias">Save alias</button><button id="list-team-aliases">List aliases</button></div>
+<pre id="alias-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No reviewed aliases loaded.</pre>
 </section>
 <section class="card" style="margin-top:14px"><h2>Chronological model evaluation</h2>
 <p class="muted">Evaluates saved pre-kickoff forecasts against later verified results. It reports no performance metrics until at least 30 eligible fixture/model samples exist. These metrics do not approve betting recommendations.</p>
@@ -806,6 +809,20 @@ document.getElementById('run-prediction').addEventListener('click',async()=>{
    out.textContent='FORECAST AVAILABLE — NOT A BETTING RECOMMENDATION\\nHome win: '+(p.homeWin*100).toFixed(2)+'%\\nDraw: '+(p.draw*100).toFixed(2)+'%\\nAway win: '+(p.awayWin*100).toFixed(2)+'%\\nEvidence state: '+p.evidenceState+'\\nHistorical rows loaded: '+data.historyRowsLoaded+'\\nHome/away samples: '+data.diagnostics.homeSamples+'/'+data.diagnostics.awaySamples+'\\nEvidence hash: '+data.evidenceHash+'\\nReason betting remains disabled: '+data.recommendationReason;
   }else{out.textContent='PREDICTION WITHHELD\\n'+JSON.stringify(data,null,2)}
  }catch(e){out.textContent='Prediction request failed. No probabilities are shown.'}
+});
+document.getElementById('save-team-alias').addEventListener('click',async()=>{
+ const out=document.getElementById('alias-output'),token=document.getElementById('provider-token').value;
+ const body={teamId:document.getElementById('alias-team-id').value.trim(),alias:document.getElementById('alias-name').value.trim(),reviewedBy:document.getElementById('alias-reviewed-by').value.trim()};
+ out.textContent='Saving explicitly reviewed alias…';
+ try{
+  const response=await fetch('/api/predictions/team-aliases',{method:'POST',headers:{'content-type':'application/json',...(token?{'x-provider-diagnostics-token':token}:{})},body:JSON.stringify(body)});
+  out.textContent=JSON.stringify(await response.json(),null,2);
+ }catch(e){out.textContent='Alias request failed. No alias was confirmed.'}
+});
+document.getElementById('list-team-aliases').addEventListener('click',async()=>{
+ const out=document.getElementById('alias-output');out.textContent='Loading reviewed aliases…';
+ try{const response=await fetch('/api/predictions/team-aliases');out.textContent=JSON.stringify(await response.json(),null,2)}
+ catch(e){out.textContent='Could not load reviewed aliases.'}
 });
 document.getElementById('save-team-mapping').addEventListener('click',async()=>{
  const out=document.getElementById('mapping-output'),token=document.getElementById('provider-token').value;
