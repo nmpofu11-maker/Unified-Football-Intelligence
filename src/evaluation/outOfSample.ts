@@ -14,7 +14,7 @@ export interface EvaluationCandidate {
   awayGoals: number;
 }
 
-export interface OutOfSampleEvaluation {
+export type OutOfSampleEvaluation = {
   state: "insufficient";
   method: "latest_pre_kickoff_forecast_per_fixture";
   sampleSize: number;
