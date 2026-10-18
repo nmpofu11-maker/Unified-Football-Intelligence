@@ -607,7 +607,7 @@ export async function resolveCanonicalFixtureProviderRefs(
 }> {
   const configuredPool = getPool();
   if (!configuredPool) return { state: "not_configured", mappings: [] };
-  if (!Array.isArray(refs) || refs.length > 200 || refs.some(ref =>
+  if (!Array.isArray(refs) || refs.length > 500 || refs.some(ref =>
     !ref || !["api-football", "sportmonks", "sportapi-ai"].includes(ref.provider) ||
     !ref.providerFixtureId?.trim() || ref.providerFixtureId.length > 200
   )) return { state: "invalid_input", mappings: [] };
