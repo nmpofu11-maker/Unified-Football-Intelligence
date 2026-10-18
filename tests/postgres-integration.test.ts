@@ -603,3 +603,72 @@ test("SportAPI identity approval requires saved safe candidate context, prevents
     await cleanupPool.end();
   }
 });
+
+
+
+test("SportAPI-only replay with no reviewed IDs preserves the existing canonical snapshot", async (t) => {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");
+    return;
+  }
+
+  const suffix = randomUUID();
+  const oldFixtureId = `ci-sportapi-only-snapshot-${suffix}`;
+  const homeName = `Existing Home ${suffix}`;
+  const awayName = `Existing Away ${suffix}`;
+  const competitionName = `Existing League ${suffix}`;
+  const kickoffUtc = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  const observedAt = new Date().toISOString();
+  const cleanupPool = new Pool({ connectionString, max: 1 });
+
+  try {
+    const schema = await getCanonicalEvidenceSummary();
+    assert.equal(schema.state, "ready");
+    await cleanupPool.query(
+      `INSERT INTO canonical_fixture_evidence
+        (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state, identity_reviewed)
+       VALUES ($1,$2,$3,$4,$5,'finished',$6,'corroborated',TRUE)`,
+      [oldFixtureId, kickoffUtc, homeName, awayName, competitionName, ["api-football", "sportmonks"]]
+    );
+    await cleanupPool.query(
+      `INSERT INTO verified_settled_results
+        (canonical_key, home_goals, away_goals, providers, evidence_state, verified_at)
+       VALUES ($1,1,0,$2,'verified',NOW())`,
+      [oldFixtureId, ["api-football", "sportmonks"]]
+    );
+
+    const sportApiOnlyCandidate: ProviderFixtureCandidate = {
+      provider: "sportapi-ai",
+      providerFixtureId: `unreviewed-sportapi-fixture-${suffix}`,
+      kickoffUtc,
+      home: { name: homeName, providerTeamId: `unreviewed-sportapi-home-${suffix}` },
+      away: { name: awayName, providerTeamId: `unreviewed-sportapi-away-${suffix}` },
+      competition: { name: competitionName },
+      status: "finished",
+      score: { home: 1, away: 0 },
+      observedAt,
+      evidenceState: "unverified",
+      rawStatus: "FT",
+      provenance: {
+        provider: "sportapi-ai",
+        providerRecordId: `sportapi-only-${suffix}`,
+        retrievedAt: observedAt,
+        evidenceState: "unverified"
+      }
+    };
+
+    const replay = await persistCanonicalEvidence([sportApiOnlyCandidate], { replaceSnapshot: true });
+    assert.equal(replay.state, "connected_empty");
+    assert.equal(replay.snapshotReplacementSkipped, true);
+
+    const summary = await getCanonicalEvidenceSummary();
+    assert.equal(summary.state, "ready");
+    assert.ok(summary.fixtures?.some(fixture => fixture.id === oldFixtureId));
+    assert.equal(summary.verifiedSettledResultCount, 1);
+  } finally {
+    await cleanupPool.query("DELETE FROM verified_settled_results WHERE canonical_key = $1", [oldFixtureId]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM canonical_fixture_evidence WHERE canonical_key = $1", [oldFixtureId]).catch(() => undefined);
+    await cleanupPool.end();
+  }
+});
