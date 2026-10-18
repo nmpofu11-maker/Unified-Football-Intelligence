@@ -349,7 +349,6 @@ test("SportAPI identity review uses country and squad metadata, not name alone",
   };
   const correct = reviewTeamSearchCandidates(tracked, [{
     provider: "sportapi-ai",
-    state: "success",
     candidates: [{
       providerTeamId: "ao-15-agosto",
       name: "15 de Agosto",
@@ -365,7 +364,6 @@ test("SportAPI identity review uses country and squad metadata, not name alone",
 
   const wrongCountry = reviewTeamSearchCandidates(tracked, [{
     provider: "sportapi-ai",
-    state: "success",
     candidates: [{
       providerTeamId: "european-15-agosto",
       name: "15 de Agosto",
@@ -379,7 +377,6 @@ test("SportAPI identity review uses country and squad metadata, not name alone",
 
   const missingCategory = reviewTeamSearchCandidates(tracked, [{
     provider: "sportapi-ai",
-    state: "success",
     candidates: [{
       providerTeamId: "unknown-category",
       name: "15 de Agosto",
