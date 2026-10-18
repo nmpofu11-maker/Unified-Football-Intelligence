@@ -11,7 +11,8 @@ import {
   persistProviderObservations,
   persistTeamSearchObservations,
   saveReviewedSportApiTeamIdentityMapping,
-  getStoredTeamIdentityMappings
+  getStoredTeamIdentityMappings,
+  repairLegacyTeamIdentityStates
 } from "../src/storage/postgresObservations.js";
 import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
 import { createTicket, listTickets, reconcilePendingTickets } from "../src/tickets/store.js";
@@ -526,6 +527,8 @@ test("SportAPI identity approval requires saved safe candidate context, prevents
        VALUES ($1,$2,'api-football','confirmed','cross_provider_confirmed',$3,$2,'Angola')`,
       [legacyTeamId, trackedTeams[2]!.canonicalName, `legacy-provider-id-${suffix}`]
     );
+    const repaired = await repairLegacyTeamIdentityStates();
+    assert.equal(repaired.state, "ready");
     const mappings = await getStoredTeamIdentityMappings(trackedTeams);
     assert.equal(mappings.state, "ready");
     const team = mappings.teams.find(item => item.trackedTeamId === trackedTeamId);
