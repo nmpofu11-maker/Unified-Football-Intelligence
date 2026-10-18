@@ -78,3 +78,15 @@ CI validates TypeScript, unit tests, build, and the database integration test ag
 - Empty provider results: inspect the provider-specific state and rejection diagnostics; an empty list alone does not prove there are no fixtures.
 - Unresolved team mapping: review exact provider IDs, country, league and squad type; do not weaken matching.
 - No forecast: use the pipeline blocker codes to determine which evidence stage is missing. Do not invent sample sizes or confidence.
+
+
+## Reviewing a saved SportAPI.ai team candidate
+
+1. Open the dashboard's **Review SportAPI.ai team identities** section after configuring PostgreSQL and provider credentials.
+2. Enter the configured provider-diagnostics token in the existing token field. In production, the review endpoint is disabled unless `PROVIDER_DIAGNOSTICS_TOKEN` is configured.
+3. Select the favourite team, load its saved SportAPI.ai candidates, and inspect the exact team name, country, league, gender/team-type metadata, and review assessment.
+4. Only confirm a candidate marked `candidate_matches_watchlist_context`. A candidate must come from the latest successful saved search for that favourite, match its exact/curated name, match the watchlist country, and not conflict with the squad category. Provider-ID collisions or reassignment of an already-confirmed ID are rejected.
+5. The entered reviewer label is stored for audit but is **not** an independently authenticated user identity. The shared diagnostics token authorizes the action; use a separately authenticated identity system if person-level attribution is required.
+6. Replay stored observations after reviewing identities. Replay makes no provider API calls. Verify the resulting canonical fixture coverage and blocker codes before testing a forecast.
+
+An operator-reviewed SportAPI ID enables provider fixture identity matching only. It does not verify fixtures or results, establish historical sample sufficiency, calibrate the model, enable betting recommendations, or settle a ticket by itself.
