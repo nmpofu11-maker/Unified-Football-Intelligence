@@ -19,8 +19,8 @@ const selections: TicketSelection[] = [
 test("ticket becomes lost immediately when any verified selection loses, even if another is pending", () => {
   const settled = settleTicket(selections, new Map([["f1", result("f1", 0, 2)]]));
   assert.equal(settled.state, "lost");
-  assert.equal(settled.selections[0].state, "lost");
-  assert.equal(settled.selections[1].state, "pending");
+  assert.equal(settled.selections[0]?.state, "lost");
+  assert.equal(settled.selections[1]?.state, "pending");
 });
 
 test("ticket remains pending when results are missing and no verified selection has lost", () => {
