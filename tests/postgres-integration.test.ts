@@ -484,7 +484,7 @@ test("SportAPI identity approval requires saved safe candidate context, prevents
   const providerTeamId = `sportapi-team-${suffix}`;
   const trackedTeams = [
     { id: trackedTeamId, canonicalName: `Review Club ${suffix}`, country: "Angola", teamCategory: "senior" },
-    { id: secondTeamId, canonicalName: `Review Rival ${suffix}`, country: "Angola", teamCategory: "senior" },
+    { id: secondTeamId, canonicalName: `Review Club ${suffix}`, country: "Angola", teamCategory: "senior" },
     { id: legacyTeamId, canonicalName: `Legacy Single Provider ${suffix}`, country: "Angola", teamCategory: "senior" }
   ];
   const cleanupPool = new Pool({ connectionString, max: 1 });
@@ -537,6 +537,24 @@ test("SportAPI identity approval requires saved safe candidate context, prevents
     const legacy = mappings.teams.find(item => item.trackedTeamId === legacyTeamId);
     assert.equal(legacy?.providers.find(item => item.provider === "api-football")?.providerIdentityState, "needs_review");
 
+    const secondSearch = await persistTeamSearchObservations([{
+      trackedTeamId: secondTeamId,
+      canonicalName: trackedTeams[1]!.canonicalName,
+      providers: [{
+        provider: "sportapi-ai",
+        state: "success",
+        candidates: [{
+          provider: "sportapi-ai",
+          providerTeamId,
+          name: trackedTeams[1]!.canonicalName,
+          country: "Angola",
+          gender: "male",
+          teamType: "senior",
+          league: "Girabola"
+        }]
+      }]
+    }]);
+    assert.equal(secondSearch.state, "saved");
     const collision = await saveReviewedSportApiTeamIdentityMapping({
       trackedTeamId: secondTeamId, providerTeamId, reviewedBy: "integration-test"
     }, trackedTeams);
