@@ -62,9 +62,7 @@ test("PostgreSQL persists raw observations idempotently without promoting them t
 
     const canonical = await getCanonicalEvidenceSummary();
     assert.equal(canonical.state, "ready");
-    assert.equal(canonical.fixtures.some(fixture => fixture.id === fixtureId), false);
-    assert.equal(canonical.verifiedSettledResultCount === undefined, false);
-    assert.equal(canonical.fixtures.length, 0);
+    assert.deepEqual(canonical.fixtures, []);
     assert.equal(canonical.verifiedSettledResultCount, 0);
   } finally {
     await cleanupPool.query(
