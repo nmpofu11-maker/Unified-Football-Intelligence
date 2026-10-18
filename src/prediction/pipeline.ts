@@ -408,16 +408,32 @@ export async function listSavedPredictions(limitInput = 20) {
   if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const, predictions: [] };
   const limit = Number.isInteger(limitInput) ? Math.max(1, Math.min(100, limitInput)) : 20;
   try {
+    const canonicalEvidence = await getCanonicalEvidenceSummary();
+    if (canonicalEvidence.state !== "ready") {
+      return { state: "error" as const, predictions: [], errorCode: "canonical_evidence_unavailable" };
+    }
     await ensurePredictionSchema();
     const result = await pool.query(
-      `SELECT id, canonical_key, generated_at, model_id, model_version, evidence_hash,
-              evidence_state, forecast, diagnostics, created_at
-       FROM prediction_ledger
-       ORDER BY generated_at DESC, id DESC
+      `SELECT p.id, p.canonical_key, p.generated_at, p.model_id, p.model_version, p.evidence_hash,
+              p.evidence_state, p.forecast, p.diagnostics, p.created_at,
+              COALESCE(f.identity_reviewed, FALSE) AS currently_identity_eligible,
+              CASE
+                WHEN f.canonical_key IS NULL THEN 'canonical_fixture_missing'
+                WHEN f.identity_reviewed IS TRUE THEN 'identity_gate_passed'
+                ELSE 'legacy_unreviewed_identity'
+              END AS current_identity_status
+       FROM prediction_ledger p
+       LEFT JOIN canonical_fixture_evidence f ON f.canonical_key = p.canonical_key
+       ORDER BY p.generated_at DESC, p.id DESC
        LIMIT $1`,
       [limit]
     );
-    return { state: "ready" as const, count: result.rows.length, predictions: result.rows };
+    return {
+      state: "ready" as const,
+      count: result.rows.length,
+      predictions: result.rows,
+      note: "Ledger records are immutable and exploratory. current_identity_status marks legacy forecasts whose canonical fixture identity is no longer trusted by the current evidence gate; identity_gate_passed is not model calibration or betting approval."
+    };
   } catch {
     return { state: "error" as const, predictions: [], errorCode: "prediction_ledger_unavailable" };
   }
