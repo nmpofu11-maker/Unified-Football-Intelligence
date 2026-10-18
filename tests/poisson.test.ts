@@ -57,3 +57,25 @@ test("model abstains when goal-grid configuration is invalid", () => {
   assert.equal(out.forecast.draw, null);
   assert.equal(out.forecast.awayWin, null);
 });
+
+
+test("model excludes otherwise verified results whose source evidence arrived after forecast cutoff", () => {
+  const matches = history(12);
+  matches[0] = {
+    ...matches[0]!,
+    result: {
+      ...matches[0]!.result,
+      provenance: [{provider:"late-source", retrievedAt:"2026-03-01T13:00:00.000Z", evidenceState:"verified" as const}]
+    }
+  };
+  const out = forecastPoisson({
+    fixtureId:"upcoming", homeTeamId:"A", awayTeamId:"B",
+    kickoffUtc:"2026-03-01T12:00:00.000Z", generatedAt:"2026-02-28T12:00:00.000Z",
+    matches
+  });
+  assert.equal(out.diagnostics.leagueSamples, 11);
+  assert.equal(out.forecast.evidenceState, "insufficient_evidence");
+  assert.equal(out.forecast.homeWin, null);
+  assert.equal(out.forecast.draw, null);
+  assert.equal(out.forecast.awayWin, null);
+});
