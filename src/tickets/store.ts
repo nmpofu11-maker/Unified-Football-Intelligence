@@ -85,6 +85,27 @@ export async function createTicket(input: CreateTicketInput) {
   }
 }
 
+export async function getTicketById(ticketId: string) {
+  if (!process.env.DATABASE_URL?.trim()) {
+    return { state: "not_configured" as const, ticket: null, reason: "database_not_configured" };
+  }
+  const id = ticketId.trim();
+  if (!id || id.length > 200) {
+    return { state: "invalid_input" as const, ticket: null, reason: "ticket_id_invalid" };
+  }
+  try {
+    await ensureTicketSchema();
+    const result = await pool.query(
+      `SELECT ticket_id, stake_amount, potential_payout, status, selections, settlement, created_at, updated_at
+       FROM ticket_records WHERE ticket_id = $1 LIMIT 1`,
+      [id]
+    );
+    return { state: "ready" as const, ticket: result.rows[0] ?? null };
+  } catch {
+    return { state: "error" as const, ticket: null, reason: "ticket_store_unavailable" };
+  }
+}
+
 export async function listTickets(limit = 50) {
   if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const, tickets: [] };
   const boundedLimit = Number.isInteger(limit) ? Math.max(1, Math.min(100, limit)) : 50;
