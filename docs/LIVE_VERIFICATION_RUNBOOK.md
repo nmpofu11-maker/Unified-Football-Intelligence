@@ -1,64 +1,80 @@
-# Live deployment and favourite-team discovery runbook
+# Live deployment and evidence-pipeline verification runbook
 
-This runbook starts after the code in `feature/canonical-evidence-pipeline` has been deployed. It does not assume provider access or a working database until each check passes.
+This runbook applies to the current `main` code. It distinguishes code/CI verification from checks that must run against the real deployment. Do not assume the application is production-ready until each relevant live stage is confirmed.
 
-## A. Required server-side configuration
+## A. Configure server-side secrets
 
-Configure these values in the hosting platform's server-side secrets/runtime environment, never in browser-visible configuration:
+Set only the provider credentials you are authorized to use, plus a persistent PostgreSQL URL and a strong diagnostics token:
 
-- `DATABASE_URL`: managed PostgreSQL connection URL with the database provider's required TLS settings.
-- `API_FOOTBALL_KEY`: API-Football key.
-- `SPORTMONKS_API_KEY`: Sportmonks API token.
-- `PROVIDER_DIAGNOSTICS_TOKEN`: a strong private token used by protected diagnostics and discovery endpoints.
+- `DATABASE_URL`: persistent PostgreSQL connection URL with required TLS settings.
+- `SPORTAPI_AI_KEY` (or `SPORTAPI_API_KEY`): SportAPI.ai adapter.
+- `SPORTMONKS_API_KEY` (or `SPORTMONKS_API_TOKEN`): Sportmonks adapter.
+- `API_FOOTBALL_KEY`: optional API-Football adapter.
+- `PROVIDER_DIAGNOSTICS_TOKEN`: protects administrative discovery, replay, and ticket actions where required.
 
-Redeploy/restart after changing environment variables. Keep secrets out of Git, screenshots, URLs, issue comments, and chat.
+The current server reports TheRundown as not connected; setting a TheRundown key alone does not mean that adapter is implemented. Do not place any secret in frontend/public variables, URLs, screenshots, source code, or chat. Restart/redeploy after changing server-side variables.
 
-## B. Verify the deployment before using discovery
+## B. Verify the exact deployment and storage
 
 Replace `APP_HOST` with the actual deployed host.
 
-1. Open `https://APP_HOST/api/storage/status`.
-   - Continue only if `state` is `ready`.
-   - If it is `not_configured`, configure `DATABASE_URL` on the server and redeploy.
-   - If it is `error`, fix the database connection before proceeding.
-2. Open `https://APP_HOST/api/history/status` and record the initial counts for tracked teams, saved search observations, and confirmed/ambiguous/unresolved mappings.
-3. Open the app dashboard. Confirm the **Discover favourite teams** control is present. If it is missing, the latest feature branch is not deployed or the deployment did not build the expected revision.
-4. Use the existing protected-token field to enter the configured diagnostics token. Do not send the token to anyone or include it in a screenshot.
+1. Open `https://APP_HOST/health`. HTTP 200 means process liveness only; read the readiness fields in the JSON.
+2. Open `https://APP_HOST/api/storage/status`. Continue only if `state` is `ready`; fix missing configuration or connection errors before provider calls.
+3. Open `https://APP_HOST/api/storage/observations/summary` and record the baseline counts.
+4. Open `https://APP_HOST/api/data-pipeline/status`. Record each stage's state and blocker/error codes.
+5. Open `https://APP_HOST/api/predictions/status` and `https://APP_HOST/api/history/status`. A missing or unavailable count is not evidence of zero records.
 
-## C. Run automatic discovery
+No deployment URL is confirmed by source inspection alone. Use the host from your actual deployment provider.
 
-1. Click **Discover favourite teams** once and keep the dashboard open while it runs.
-2. Let it respect the built-in pacing and retry behavior; do not repeatedly click the control or run multiple discovery sessions at once.
-3. The process is bounded to 32 batches per dashboard run and searches up to five teams per batch. It may take several minutes due to provider throttling.
-4. Inspect the progress output. A rate-limit response should trigger a wait/retry, not rapid repeated requests.
-5. Refresh `/api/history/status` and `/api/teams/watchlist` after completion. Confirm search progress and mapping counts changed as expected.
-6. Open `/api/teams/provider-search/results` to inspect persisted candidate evidence. Candidate results should survive a server restart/redeploy when the same PostgreSQL database is used.
+## C. Verify provider calls and durable raw observations
 
-## D. Interpret mapping outcomes safely
+1. In the dashboard, run **Check providers** once for a date where matches should exist.
+2. Inspect each provider's diagnostics separately: credential state, last success time, accepted/rejected records, rate limits and sanitized error codes.
+3. Inspect the returned persistence result. New valid candidates should produce `state: "saved"` and `inserted > 0`; duplicates can be skipped. A valid empty response is not the same as an error, but it is not fixture coverage.
+4. Recheck `/api/storage/observations/summary` and confirm counts/timestamps change when new observations are inserted.
+5. Restart/redeploy using the same database, then confirm the records persist.
 
-- **Confirmed** means each provider returned exactly one exact-name or curated-alias candidate and their country metadata agrees.
-- **Ambiguous** means candidates conflict or more than one exact candidate exists. Do not force a match just to increase the count.
-- **Unresolved** means available provider evidence is insufficient. Check provider spelling/country coverage and investigate those candidates before adding a curated alias.
-- The original 80 favourite-team names must remain intact. They are a user watchlist, not proof of provider identity or historical coverage.
-- Do not infer a team's country from a similar name. Preserve league, country, youth, reserve, women's and suffix distinctions. A team name alone is not enough to safely map a provider ID.
+Do not repeatedly trigger provider requests to overcome a rate limit. Respect the built-in pacing and provider quotas.
 
-## E. Verify durability
+## D. Verify favourite-team discovery without guessing identities
 
-1. Record the observation count from `/api/storage/status`.
-2. Run discovery and confirm the saved candidate count rises when new candidates are returned.
-3. Restart or redeploy the service without changing `DATABASE_URL`.
-4. Recheck storage and search-result endpoints. Existing records and mappings must remain.
-5. If records disappear after restart/redeploy, stop discovery and fix persistent database configuration before spending more provider quota.
+1. Open `/api/teams/watchlist` and confirm the original 80 favourite-team names remain unchanged.
+2. Run **Discover favourite teams** from the dashboard or use the protected next-batch workflow, one run at a time.
+3. Inspect `/api/teams/provider-search/results` for saved candidate evidence and league/country/squad context.
+4. Candidate records are not confirmed identities. Preserve country, league, season and senior/reserve/youth/women distinctions. A name-only or fuzzy match is not sufficient.
+5. Keep ambiguous or unresolved teams unmapped until source IDs and competition context support a review decision. Do not force a match merely to raise mapping counts.
 
-## F. What discovery does not prove
+SportAPI.ai catalogue candidates can improve discovery, but optional catalogue results do not independently confirm a canonical identity or prove historical match coverage.
 
-Team catalogue identity mapping is not match-history ingestion. It does not verify fixture results, create verified historical records, calibrate forecasts, or authorize betting recommendations. Those gates remain closed until historical results are sourced, settled, independently verified, season/competition mappings are correct, and chronological backtesting/calibration passes.
+## E. Verify canonical fixtures and historical results
 
-## Troubleshooting checklist
+1. Trigger the supported history replay/reconciliation action only after raw observation persistence is confirmed.
+2. Inspect `/api/data-pipeline/status`, `/api/fixtures`, and `/api/history/status`.
+3. Confirm that canonical fixture counts are backed by corroborated provider evidence and unresolved provider IDs are excluded.
+4. Confirm that a verified settled result requires independent providers to agree on the fixture identity, finished status and exact score. Conflicts must stay excluded.
+5. Check replay diagnostics for conflict reasons and stale live-status observations. Verify that the resulting counts persist after restart.
 
-- `state: not_configured`: `DATABASE_URL` missing from the running service environment.
-- `state: error`: database networking, credentials, TLS, or schema/startup issue; use sanitized server logs and never share secrets.
-- Missing discovery control: wrong deployed revision or stale browser page.
-- Unauthorized response: the token must match the deployed `PROVIDER_DIAGNOSTICS_TOKEN`.
-- No provider candidates: verify provider credentials, plan/permissions, query coverage and provider response diagnostics; an HTTP 200 with an empty list is not a team match.
-- Everything unresolved: do not weaken the matching rules. Review the actual candidate names and country metadata first.
+A large raw-observation count is not the same as a large verified-history count. The 80 favourite teams are a watchlist, not evidence that the teams are mapped or have sufficient historical samples.
+
+## F. Verify forecasts and ticket settlement
+
+1. Inspect `/api/predictions/status` and `/api/data-pipeline/status` before running forecasts.
+2. A forecast should only be emitted when a fresh corroborated future fixture, reviewed exact team mappings, and sufficient same-competition verified results strictly before kickoff are available.
+3. If evidence is insufficient, probabilities must be null and diagnostics must explain the blocker. Do not introduce fixed priors or odds-driven fallbacks to fill gaps.
+4. Check `/api/predictions/ledger?limit=20` for stored evidence hashes and timestamps. Calibration and betting recommendations remain unavailable until genuine chronological out-of-sample evaluation supports them.
+5. Submit a test ticket only in a safe test environment. Verify that a ticket is marked lost as soon as any leg has a verified losing result, while missing, conflicted or unverified results cannot settle a leg. Confirm settlement events persist across restart.
+
+## G. What CI does and does not prove
+
+CI validates TypeScript, unit tests, build, and the database integration test against an ephemeral PostgreSQL instance. It does not prove that production secrets are configured, that live providers return data for the user's leagues, that production storage survives redeploy, that all favourite teams are mapped, that verified historical samples are sufficient, or that the model is calibrated.
+
+**Go/no-go:** until live storage, provider ingestion, reconciliation, verified results, and out-of-sample evaluation are confirmed, treat predictions as exploratory and keep betting recommendations disabled.
+
+## Troubleshooting
+
+- `not_configured`: required server environment variable missing.
+- `database_connection_failed` / `database_operation_failed`: inspect server-side network, permissions, TLS and schema diagnostics without exposing credentials.
+- `rate_limited`: wait for the provider's reset window; do not loop requests.
+- Empty provider results: inspect the provider-specific state and rejection diagnostics; an empty list alone does not prove there are no fixtures.
+- Unresolved team mapping: review exact provider IDs, country, league and squad type; do not weaken matching.
+- No forecast: use the pipeline blocker codes to determine which evidence stage is missing. Do not invent sample sizes or confidence.
