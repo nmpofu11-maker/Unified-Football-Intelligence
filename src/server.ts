@@ -3,7 +3,7 @@ import "dotenv/config";
 import express, { type Request, type Response } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { aggregateProviderStatus } from "./status/aggregate.js";
-import { createTicket, listTickets, reconcilePendingTickets } from "./tickets/store.js";
+import { createTicket, getTicketById, listTickets, reconcilePendingTickets } from "./tickets/store.js";
 import { parseBetMatrixTicket } from "./tickets/betmatrixImport.js";
 import { loadOutOfSampleEvaluation } from "./evaluation/store.js";
 import type { ProviderDiagnostics } from "./providers/provider.js";
@@ -961,8 +961,24 @@ app.post("/api/tickets/import-betmatrix", async (req: Request, res: Response) =>
       imported++;
       results.push({ sourceTicketId: ticket.sourceTicketId, ticketId: `betmatrix:${ticket.sourceTicketId}`, state: "imported" });
     } else if (saved.state === "conflict") {
-      alreadyImported++;
-      results.push({ sourceTicketId: ticket.sourceTicketId, ticketId: `betmatrix:${ticket.sourceTicketId}`, state: "already_imported" });
+      const existing = await getTicketById(`betmatrix:${ticket.sourceTicketId}`);
+      if (existing.state === "ready" && existing.ticket &&
+          Number(existing.ticket.stake_amount) === ticket.stakeAmount &&
+          Number(existing.ticket.potential_payout) === ticket.potentialPayout &&
+          JSON.stringify(existing.ticket.selections) === JSON.stringify(selections)) {
+        alreadyImported++;
+        results.push({ sourceTicketId: ticket.sourceTicketId, ticketId: `betmatrix:${ticket.sourceTicketId}`, state: "already_imported" });
+      } else {
+        rejected++;
+        results.push({
+          sourceTicketId: ticket.sourceTicketId,
+          ticketId: `betmatrix:${ticket.sourceTicketId}`,
+          state: "rejected",
+          reason: existing.state === "ready" && existing.ticket
+            ? "source_ticket_id_reused_with_different_ticket_contents"
+            : "existing_ticket_conflict_could_not_be_verified"
+        });
+      }
     } else {
       rejected++;
       results.push({ sourceTicketId: ticket.sourceTicketId, state: "rejected", reason: "ticket_store_unavailable_or_validation_failed" });
