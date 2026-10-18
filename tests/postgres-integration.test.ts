@@ -219,3 +219,112 @@ test("replay preserves existing canonical rows when supplied provider IDs are un
     await cleanupPool.end();
   }
 });
+
+
+test("unmapped SportAPI fixture IDs do not block a safe snapshot rebuild from mapped primary providers", async (t) => {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");
+    return;
+  }
+
+  const suffix = randomUUID();
+  const homeName = `Replay Home ${suffix}`;
+  const awayName = `Replay Away ${suffix}`;
+  const competitionName = `Replay League ${suffix}`;
+  const oldFixtureId = `ci-old-snapshot-${suffix}`;
+  const trackedHomeId = `ci-tracked-home-${suffix}`;
+  const trackedAwayId = `ci-tracked-away-${suffix}`;
+  const kickoffUtc = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+  const observedAt = new Date().toISOString();
+  const cleanupPool = new Pool({ connectionString, max: 1 });
+
+  const candidateFor = (
+    provider: ProviderFixtureCandidate["provider"],
+    homeProviderId: string,
+    awayProviderId: string
+  ): ProviderFixtureCandidate => ({
+    provider,
+    providerFixtureId: `${provider}-${suffix}`,
+    kickoffUtc,
+    home: { name: homeName, providerTeamId: homeProviderId },
+    away: { name: awayName, providerTeamId: awayProviderId },
+    competition: { name: competitionName },
+    status: "finished",
+    score: { home: 2, away: 0 },
+    observedAt,
+    evidenceState: "unverified",
+    rawStatus: "FT",
+    provenance: {
+      provider,
+      providerRecordId: `${provider}-${suffix}`,
+      retrievedAt: observedAt,
+      evidenceState: "unverified"
+    }
+  });
+
+  try {
+    const schema = await getCanonicalEvidenceSummary();
+    assert.equal(schema.state, "ready");
+
+    await cleanupPool.query(
+      `INSERT INTO canonical_fixture_evidence
+        (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state, identity_reviewed)
+       VALUES ($1,$2,$3,$4,$5,'finished',$6,'corroborated',TRUE)`,
+      [oldFixtureId, kickoffUtc, homeName, awayName, competitionName, ["api-football", "sportmonks"]]
+    );
+    await cleanupPool.query(
+      `INSERT INTO verified_settled_results
+        (canonical_key, home_goals, away_goals, providers, evidence_state, verified_at)
+       VALUES ($1,2,0,$2,'verified',NOW())`,
+      [oldFixtureId, ["api-football", "sportmonks"]]
+    );
+
+    const mappings = [
+      [trackedHomeId, homeName, "api-football", `api-home-${suffix}`],
+      [trackedHomeId, homeName, "sportmonks", `sportmonks-home-${suffix}`],
+      [trackedAwayId, awayName, "api-football", `api-away-${suffix}`],
+      [trackedAwayId, awayName, "sportmonks", `sportmonks-away-${suffix}`]
+    ] as const;
+    for (const [trackedTeamId, canonicalName, provider, providerTeamId] of mappings) {
+      await cleanupPool.query(
+        `INSERT INTO team_identity_mappings
+          (tracked_team_id, canonical_name, provider, mapping_state, provider_identity_state, provider_team_id, provider_team_name, country)
+         VALUES ($1,$2,$3,'confirmed','cross_provider_confirmed',$4,$2,'Test Country')`,
+        [trackedTeamId, canonicalName, provider, providerTeamId]
+      );
+    }
+
+    const replay = await persistCanonicalEvidence([
+      candidateFor("api-football", `api-home-${suffix}`, `api-away-${suffix}`),
+      candidateFor("sportmonks", `sportmonks-home-${suffix}`, `sportmonks-away-${suffix}`),
+      candidateFor("sportapi-ai", `sportapi-home-${suffix}`, `sportapi-away-${suffix}`)
+    ], { replaceSnapshot: true });
+
+    assert.equal(replay.state, "saved");
+    assert.equal(replay.snapshotReplacementSkipped, undefined);
+    assert.equal(replay.corroboratedFixtures, 1);
+    assert.equal(replay.verifiedResults, 1);
+
+    const summary = await getCanonicalEvidenceSummary();
+    assert.equal(summary.state, "ready");
+    assert.ok(!summary.fixtures?.some(fixture => fixture.id === oldFixtureId));
+    assert.ok(summary.fixtures?.some(fixture =>
+      fixture.home === homeName && fixture.away === awayName &&
+      fixture.competition === competitionName && fixture.evidenceState === "corroborated"
+    ));
+  } finally {
+    const rows = await cleanupPool.query<{ canonical_key: string }>(
+      `SELECT canonical_key FROM canonical_fixture_evidence
+       WHERE canonical_key = $1 OR (home_name = $2 AND away_name = $3 AND competition_name = $4)`,
+      [oldFixtureId, homeName, awayName, competitionName]
+    ).catch(() => ({ rows: [] as Array<{ canonical_key: string }> }));
+    const keys = rows.rows.map(row => row.canonical_key);
+    if (keys.length) {
+      await cleanupPool.query("DELETE FROM verified_settled_results WHERE canonical_key = ANY($1::text[])", [keys]).catch(() => undefined);
+      await cleanupPool.query("DELETE FROM canonical_fixture_evidence WHERE canonical_key = ANY($1::text[])", [keys]).catch(() => undefined);
+    }
+    await cleanupPool.query("DELETE FROM team_identity_mappings WHERE tracked_team_id = ANY($1::text[])", [[trackedHomeId, trackedAwayId]]).catch(() => undefined);
+    await cleanupPool.end();
+  }
+});
