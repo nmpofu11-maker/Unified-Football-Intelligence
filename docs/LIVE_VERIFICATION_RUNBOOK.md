@@ -18,6 +18,8 @@ The current server reports TheRundown as not connected; setting a TheRundown key
 
 Replace `APP_HOST` with the actual deployed host.
 
+For a consolidated read-only report, run `npm run verify:live -- https://APP_HOST` from the repository after installing dependencies. It checks the public health, storage, pipeline, prediction, history and watchlist endpoints; it does not call provider APIs, mutate data, or enable betting. `PASS` means the inspected evidence stages are present, not that the model is calibrated. `WARN` means the host responds but evidence is incomplete; `FAIL` means a hard check such as storage, endpoint availability, or the 80-team watchlist failed. The report intentionally keeps `bettingRecommendationsEnabled` false.
+
 1. Open `https://APP_HOST/health`. HTTP 200 means process liveness only; read the readiness fields in the JSON.
 2. Open `https://APP_HOST/api/storage/status`. Continue only if `state` is `ready`; fix missing configuration or connection errors before provider calls.
 3. Open `https://APP_HOST/api/storage/observations/summary` and record the baseline counts.
