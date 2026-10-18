@@ -306,6 +306,7 @@ export function reconcileTeamSearchIdentity(
   const matchingNames = namesFor(tracked);
   const normalizeCountry = (value: string): string =>
     value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+  const reasons = new Set<string>();
   const providers = (["api-football", "sportmonks"] as const).map(provider => {
     const result = providerResults.find(item => item.provider === provider);
     const candidates = (result?.candidates ?? []).filter(candidate => {
@@ -330,7 +331,6 @@ export function reconcileTeamSearchIdentity(
     });
     return { provider, result, candidates };
   });
-  const reasons = new Set<string>();
   const identities: TeamSearchIdentityResolution["identities"] = [];
   if (providers.some(item => item.candidates.length > 1)) {
     reasons.add("multiple_exact_candidates_within_provider");
