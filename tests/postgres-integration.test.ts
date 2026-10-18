@@ -10,9 +10,9 @@ import {
 } from "../src/storage/postgresObservations.js";
 import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
 
-test("PostgreSQL persists raw observations idempotently without promoting them to verified evidence", async () => {
+test("PostgreSQL persists raw observations idempotently without promoting them to verified evidence", async (t) => {
   const connectionString = process.env.DATABASE_URL?.trim();
-  assert.ok(connectionString, "DATABASE_URL must be set for PostgreSQL integration tests");
+  if (!connectionString) {\n    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");\n    return;\n  }
 
   const fixtureId = `ci-integration-${randomUUID()}`;
   const observedAt = new Date().toISOString();
