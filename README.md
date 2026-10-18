@@ -29,7 +29,7 @@ Monitor broadly, build deeper verified histories for the original 80 priority te
 The prediction path reads directly from PostgreSQL; it does not accept user-supplied averages or odds as model features.
 
 - `GET /api/predictions/status` — database readiness plus provider-observation, corroborated-future-fixture, verified-result, team-mapping and forecast-ledger counts. A database-ready response does not imply the evidence is sufficient.
-- `GET /api/predictions/ledger?limit=20` — latest persisted exploratory forecasts, diagnostics and evidence hashes (limit 1–100).
+- `GET /api/predictions/ledger?limit=20` — latest persisted exploratory forecasts, diagnostics and evidence hashes (limit 1–100). Each row includes `current_identity_status` (`identity_gate_passed`, `legacy_unreviewed_identity`, or `canonical_fixture_missing`) so older forecasts are retained for audit without being mistaken for current evidence-qualified forecasts.
 - `GET /api/evaluation/out-of-sample` — evaluates only eligible pre-kickoff forecasts against later verified settled results; metrics remain null until at least 30 unique eligible fixture/model/version samples are available. See `docs/EVALUATION.md`.
 - `GET /api/predictions/team-mappings` — list explicitly reviewed canonical team mappings.
 - `POST /api/predictions/team-mappings` — save a reviewed mapping. In production, send the configured `x-provider-diagnostics-token` header. JSON body: `{"teamId":"your-reviewed-stable-id","canonicalName":"exact canonical fixture team name","reviewedBy":"reviewer identifier"}`.

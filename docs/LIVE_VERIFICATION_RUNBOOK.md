@@ -61,7 +61,7 @@ A large raw-observation count is not the same as a large verified-history count.
 1. Inspect `/api/predictions/status` and `/api/data-pipeline/status` before running forecasts.
 2. A forecast should only be emitted when a fresh corroborated future fixture, reviewed exact team mappings, and sufficient same-competition verified results strictly before kickoff are available.
 3. If evidence is insufficient, probabilities must be null and diagnostics must explain the blocker. Do not introduce fixed priors or odds-driven fallbacks to fill gaps.
-4. Check `/api/predictions/ledger?limit=20` for stored evidence hashes and timestamps. Calibration and betting recommendations remain unavailable until genuine chronological out-of-sample evaluation supports them.
+4. Check `/api/predictions/ledger?limit=20` for stored evidence hashes and timestamps. Read `current_identity_status`: `legacy_unreviewed_identity` and `canonical_fixture_missing` are retained for audit but are not currently identity-eligible. Calibration and betting recommendations remain unavailable until genuine chronological out-of-sample evaluation supports them.
 5. Submit a test ticket only in a safe test environment. Verify that a ticket is marked lost as soon as any leg has a verified losing result, while missing, conflicted or unverified results cannot settle a leg. Confirm settlement events persist across restart.
 
 ## G. What CI does and does not prove
