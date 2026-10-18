@@ -498,6 +498,7 @@ test("SportAPI identity approval requires saved safe candidate context, prevents
         provider: "sportapi-ai",
         state: "success",
         candidates: [{
+          provider: "sportapi-ai",
           providerTeamId,
           name: trackedTeams[0]!.canonicalName,
           country: "Angola",
@@ -516,9 +517,9 @@ test("SportAPI identity approval requires saved safe candidate context, prevents
     assert.equal(saved.mapping?.providerTeamId, providerTeamId);
     assert.equal(saved.mapping?.reviewedBy, "integration-test");
 
-    const mappings = await getStoredTeamIdentityMappings();
+    const mappings = await getStoredTeamIdentityMappings(trackedTeams);
     assert.equal(mappings.state, "ready");
-    const team = mappings.mappings.find(item => item.trackedTeamId === trackedTeamId);
+    const team = mappings.teams.find(item => item.trackedTeamId === trackedTeamId);
     assert.equal(team?.state, "confirmed");
     assert.equal(team?.providers.find(item => item.provider === "sportapi-ai")?.providerIdentityState, "operator_reviewed");
 
