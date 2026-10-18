@@ -1071,7 +1071,7 @@ async function runAutomaticProviderPoll(): Promise<void> {
           automaticPollStatus.canonicalPersistenceState = canonical.state;
           automaticPollStatus.corroboratedFixtures = (automaticPollStatus.corroboratedFixtures ?? 0) + canonical.corroboratedFixtures;
           automaticPollStatus.verifiedResults = (automaticPollStatus.verifiedResults ?? 0) + canonical.verifiedResults;
-          if (persistence.state !== "ready" || canonical.state !== "ready") {
+          if (!["saved", "connected_empty"].includes(persistence.state) || !["saved", "connected_empty"].includes(canonical.state)) {
             automaticPollStatus.failedDateCount += 1;
             automaticPollStatus.lastErrorCode = "provider_poll_persistence_not_ready";
           }
