@@ -13,6 +13,8 @@
 - `GET /api/predictions/ledger?limit=20` returns a bounded read-only view of recent forecast records.
 - `GET /api/status` now reflects the current storage/prediction implementation rather than incorrectly claiming the ledger is not implemented.
 - Forecast generation fails closed when canonical fixture evidence is stale (default maximum age 180 minutes; configurable with `FIXTURE_EVIDENCE_MAX_AGE_MINUTES`).
+- Persistent ticket records and audited settlement events are available through authenticated APIs; pending tickets are re-evaluated after fresh result ingestion and lose immediately when a verified leg loses.
+- A bounded historical results ingestion endpoint accepts past UTC date ranges up to seven days and promotes only cross-provider-agreed finished scores.
 - An abstained forecast now returns `null` probabilities instead of misleading `0 / 0 / 0`; validation rejects partial-null probability triplets.
 
 ## CI verification
@@ -25,7 +27,7 @@ The readiness and ledger API change was merged as `6e2d464eedfaae5532bce6944666c
 - Production PostgreSQL connectivity, evidence-table compatibility and persistence across restart/redeploy still require live checks.
 - Provider credentials, quota/competition coverage, and actual fixture ingestion have not been tested here.
 - The 80 favourite-team identities and competition mappings need review; search candidates are not verified match history.
-- Verified historical-result backfill, team/competition-season completeness, chronological out-of-sample backtesting, calibration, odds ingestion and ticket settlement integration remain outstanding.
+- A full historical-result backfill, team/competition-season completeness, chronological out-of-sample backtesting, calibration, odds ingestion, automatic BetMatrix ticket import, and live settlement verification remain outstanding.
 
 ## Go/no-go
 
