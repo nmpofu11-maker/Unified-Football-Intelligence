@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { previewCandidateReconciliation } from "../src/domain/reconcileCandidates.js";
+import { hasCompleteReviewedProviderTeamIdentityCoverage, previewCandidateReconciliation } from "../src/domain/reconcileCandidates.js";
 import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
 
 function candidate(overrides: Partial<ProviderFixtureCandidate> = {}): ProviderFixtureCandidate {
@@ -8,8 +8,8 @@ function candidate(overrides: Partial<ProviderFixtureCandidate> = {}): ProviderF
     provider: "sportapi-ai",
     providerFixtureId: "one",
     kickoffUtc: "2026-10-13T18:00:00.000Z",
-    home: { name: "Bristol City", providerTeamId: "10" },
-    away: { name: "Blackburn Rovers", providerTeamId: "20" },
+    home: { name: "Bristol City" },
+    away: { name: "Blackburn Rovers" },
     competition: { name: "Championship", providerCompetitionId: "53" },
     status: "scheduled",
     observedAt: "2026-10-13T16:00:00.000Z",
@@ -75,4 +75,49 @@ test("stale live status is reported separately and does not masquerade as a prov
   assert.ok(result[0]?.reasons.includes("only_one_provider_observation"));
   assert.ok(result[0]?.reasons.includes("stale_live_status"));
   assert.ok(!result[0]?.reasons.includes("provider_status_disagreement"));
+});
+
+
+test("provider IDs are not corroborated by names until each ID has a reviewed canonical mapping", () => {
+  const sportApi = candidate({
+    home: { name: "Bristol City", providerTeamId: "sport-home" },
+    away: { name: "Blackburn Rovers", providerTeamId: "sport-away" }
+  });
+  const apiFootball = candidate({
+    provider: "api-football",
+    providerFixtureId: "api-fixture",
+    home: { name: "Bristol City", providerTeamId: "api-home" },
+    away: { name: "Blackburn Rovers", providerTeamId: "api-away" }
+  });
+
+  assert.deepEqual(previewCandidateReconciliation([sportApi, apiFootball]), []);
+  const reviewed = {
+    "sportapi-ai:sport-home": "tracked-bristol",
+    "sportapi-ai:sport-away": "tracked-blackburn",
+    "api-football:api-home": "tracked-bristol",
+    "api-football:api-away": "tracked-blackburn"
+  };
+  const result = previewCandidateReconciliation([sportApi, apiFootball], 5 * 60_000, Date.now(), reviewed);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]?.state, "corroborated");
+  assert.deepEqual(result[0]?.providers, ["api-football", "sportapi-ai"]);
+});
+
+test("complete reviewed identity coverage rejects missing, unmapped, and same-team home/away IDs", () => {
+  const withIds = candidate({
+    home: { name: "Bristol City", providerTeamId: "home-id" },
+    away: { name: "Blackburn Rovers", providerTeamId: "away-id" }
+  });
+  assert.equal(hasCompleteReviewedProviderTeamIdentityCoverage([withIds], {}), false);
+  assert.equal(hasCompleteReviewedProviderTeamIdentityCoverage([{
+    ...withIds, away: { name: "Blackburn Rovers" }
+  }], { "sportapi-ai:home-id": "home" }), false);
+  assert.equal(hasCompleteReviewedProviderTeamIdentityCoverage([withIds], {
+    "sportapi-ai:home-id": "same",
+    "sportapi-ai:away-id": "same"
+  }), false);
+  assert.equal(hasCompleteReviewedProviderTeamIdentityCoverage([withIds], {
+    "sportapi-ai:home-id": "home",
+    "sportapi-ai:away-id": "away"
+  }), true);
 });
