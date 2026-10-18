@@ -969,8 +969,8 @@ app.post("/api/tickets/import-betmatrix", async (req: Request, res: Response) =>
         ? existing.ticket.selections as Array<Record<string, unknown>> : [];
       const sameSelections = existingSelections.length === resolvedSelections.length && resolvedSelections.every((selection, index) => {
         const prior = existingSelections[index];
-        return Boolean(prior) &&
-          prior.selectionId === selection.selectionId &&
+        if (!prior) return false;
+        return prior.selectionId === selection.selectionId &&
           prior.fixtureId === selection.fixtureId &&
           prior.market === selection.market &&
           prior.pick === selection.pick &&
