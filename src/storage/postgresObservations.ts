@@ -792,6 +792,7 @@ export interface StoredTeamSearchProviderReview {
     gender?: string;
     teamType?: string;
     shortCode?: string;
+    league?: string;
   }>;
   errorCode?: string;
 }
