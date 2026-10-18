@@ -90,3 +90,4 @@ The ticket settlement API and evidence gates are documented in `docs/TICKET_SETT
 ### Data pipeline diagnostics
 
 - `GET /api/data-pipeline/status` reports provider success freshness and each persistence/evidence stage. Unknown counts remain `null`; its `blockers` list explains why evidence is not yet available. This is diagnostic only and does not enable recommendations.
+- `GET /api/automation/provider-poll/status` reports whether optional background polling is enabled/running, its last cycle timestamps, checked UTC dates, candidate count, persistence states, corroborated fixtures, verified results, ticket-settlement state and generic error codes. A completed cycle is not proof that verified results were available; check the evidence counts and provider diagnostics.
