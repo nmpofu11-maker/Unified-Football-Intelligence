@@ -34,3 +34,8 @@ The readiness and ledger API change was merged as `6e2d464eedfaae5532bce6944666c
 ## Go/no-go
 
 **Not suitable for betting recommendations or a production-ready claim yet.** The evidence-gated pipeline and forecast ledger are implemented, but deployment connectivity, verified historical data, calibration, fresh odds and risk controls must be proven independently. Betting recommendations remain disabled.
+
+
+## Runtime health semantics
+
+`/health` reports actual provider diagnostics, database state, and corroborated-fixture counts. HTTP 200 indicates process liveness only. Unavailable evidence counts remain `null`; calibrated predictions and betting recommendations remain disabled.

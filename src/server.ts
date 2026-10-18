@@ -63,11 +63,54 @@ function providerStatus() {
   });
 }
 
-app.get("/health", (_req: Request, res: Response) => res.json({
-  status: "ok", app: "Unified Football Intelligence", mode: "greenfield-foundation",
-  databaseConfigured: Boolean(process.env.DATABASE_URL), providerAdaptersConnected: false,
-  liveFixturesAvailable: false, calibratedPredictionsAvailable: false, bettingRecommendationsEnabled: false
-}));
+app.get("/health", async (_req: Request, res: Response) => {
+  // Liveness is independent of optional integrations; report readiness facts separately.
+  const [storage, predictionStorage, canonicalEvidence] = await Promise.all([
+    getObservationStoreStatus(),
+    predictionStorageStatus(),
+    getCanonicalEvidenceSummary()
+  ]);
+  const providers = providerStatus();
+  const now = Date.now();
+  const recentProviderSuccess = providers.some(provider => {
+    const d = provider.diagnostics;
+    const successAt = d.lastSuccessAt ? Date.parse(d.lastSuccessAt) : Number.NaN;
+    return provider.credentialConfigured &&
+      ["success", "success_empty", "partial"].includes(d.state) &&
+      Number.isFinite(successAt) && now - successAt >= 0 && now - successAt <= 6 * 60 * 60 * 1000;
+  });
+  const fixtureCount = canonicalEvidence.state === "ready"
+    ? (canonicalEvidence.corroboratedFixtureCount ?? 0) : null;
+  return res.json({
+    status: "ok",
+    app: "Unified Football Intelligence",
+    mode: "evidence_gated",
+    databaseConfigured: Boolean(process.env.DATABASE_URL),
+    databaseState: storage.state,
+    predictionStorageState: predictionStorage.state,
+    providerCredentialsConfigured: providers.some(p => p.credentialConfigured),
+    providerAdaptersConnected: recentProviderSuccess,
+    providerDiagnostics: providers.map(p => ({
+      name: p.name, credentialConfigured: p.credentialConfigured,
+      state: p.diagnostics.state, lastSuccessAt: p.diagnostics.lastSuccessAt ?? null,
+      lastRecordCount: p.diagnostics.lastRecordCount, lastErrorCode: p.diagnostics.lastErrorCode ?? null
+    })),
+    liveFixturesAvailable: fixtureCount === null ? null : fixtureCount > 0,
+    corroboratedFixtureCount: fixtureCount,
+    calibratedPredictionsAvailable: false,
+    bettingRecommendationsEnabled: false,
+    readiness: {
+      database: storage.state === "ready" && predictionStorage.state === "ready",
+      recentProviderSuccess,
+      corroboratedFixtures: fixtureCount !== null && fixtureCount > 0,
+      verifiedHistoricalResults: predictionStorage.state === "ready"
+        ? predictionStorage.evidence.verifiedSettledResults : null,
+      forecastModelCalibrated: false,
+      bettingRecommendations: false
+    },
+    note: "HTTP 200 confirms process liveness only. Read readiness fields separately; missing or unavailable counts remain null and never imply zero."
+  });
+});
 
 app.get("/api/status", async (_req: Request, res: Response) => {
   const [storage, predictionStorage, mappings] = await Promise.all([
