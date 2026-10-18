@@ -41,7 +41,7 @@ Do not repeatedly trigger provider requests to overcome a rate limit. Respect th
 1. Open `/api/teams/watchlist` and confirm the original 80 favourite-team names remain unchanged.
 2. Run **Discover favourite teams** from the dashboard or use the protected next-batch workflow, one run at a time.
 3. Inspect `/api/teams/provider-search/results` for saved candidate evidence and league/country/squad context.
-4. SportAPI catalogue candidates are discovery evidence only and do not auto-confirm a provider identity. For canonical fixture reconciliation, supplied API-Football/Sportmonks IDs must resolve to distinct confirmed tracked-team identities; the resolver requires one exact/curated-name candidate per provider with matching country context. An unresolved supplied ID never falls back to its display name. Preserve league, season and senior/reserve/youth/women distinctions.
+4. SportAPI catalogue candidates are discovery evidence only and do not auto-confirm a provider identity. Use the dashboard's protected **Review SportAPI.ai team identities** section to approve a saved candidate explicitly. The server requires an exact/curated name match, matching country and matching squad category, and records the reviewer/time. For canonical fixture reconciliation, supplied API-Football/Sportmonks IDs must resolve to distinct confirmed tracked-team identities; the resolver requires one exact/curated-name candidate per provider with matching country context. An unresolved supplied ID never falls back to its display name. Preserve league, season and senior/reserve/youth/women distinctions.
 5. Keep ambiguous or unresolved teams unmapped until source IDs and competition context support a review decision. Do not force a match merely to raise mapping counts.
 
 SportAPI.ai catalogue candidates can improve discovery, but optional catalogue results do not independently confirm a canonical identity or prove historical match coverage.
@@ -78,3 +78,15 @@ CI validates TypeScript, unit tests, build, and the database integration test ag
 - Empty provider results: inspect the provider-specific state and rejection diagnostics; an empty list alone does not prove there are no fixtures.
 - Unresolved team mapping: review exact provider IDs, country, league and squad type; do not weaken matching.
 - No forecast: use the pipeline blocker codes to determine which evidence stage is missing. Do not invent sample sizes or confidence.
+
+
+## Reviewing a saved SportAPI.ai team candidate
+
+1. Open the dashboard's **Review SportAPI.ai team identities** section after configuring PostgreSQL and provider credentials.
+2. Enter the configured provider-diagnostics token in the existing token field. In production, the review endpoint is disabled unless `PROVIDER_DIAGNOSTICS_TOKEN` is configured.
+3. Select the favourite team, load its saved SportAPI.ai candidates, and inspect the exact team name, country, league, gender/team-type metadata, and review assessment.
+4. Only confirm a candidate marked `candidate_matches_watchlist_context`. A candidate must come from the latest successful saved search for that favourite, match its exact/curated name, match the watchlist country, and not conflict with the squad category. Provider-ID collisions or reassignment of an already-confirmed ID are rejected.
+5. The entered reviewer label is stored for audit but is **not** an independently authenticated user identity. The shared diagnostics token authorizes the action; use a separately authenticated identity system if person-level attribution is required.
+6. Replay stored observations after reviewing identities. Replay makes no provider API calls. Verify the resulting canonical fixture coverage and blocker codes before testing a forecast.
+
+An operator-reviewed SportAPI ID enables provider fixture identity matching only. It does not verify fixtures or results, establish historical sample sufficiency, calibrate the model, enable betting recommendations, or settle a ticket by itself.

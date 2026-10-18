@@ -6,8 +6,13 @@ import {
   getCanonicalEvidenceSummary,
   getObservationStoreStatus,
   getObservationStoreSummary,
+  getReviewedProviderTeamIdentityMap,
   persistCanonicalEvidence,
-  persistProviderObservations
+  persistProviderObservations,
+  persistTeamSearchObservations,
+  saveReviewedSportApiTeamIdentityMapping,
+  getStoredTeamIdentityMappings,
+  repairLegacyTeamIdentityStates
 } from "../src/storage/postgresObservations.js";
 import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
 import { createTicket, listTickets, reconcilePendingTickets } from "../src/tickets/store.js";
@@ -394,6 +399,177 @@ test("forecast ledger labels legacy unreviewed fixture identities instead of pre
     await cleanupPool.query("DELETE FROM prediction_ledger WHERE canonical_key = ANY($1::text[])", [fixtureKeys]).catch(() => undefined);
     await cleanupPool.query("DELETE FROM verified_settled_results WHERE canonical_key = ANY($1::text[])", [fixtureKeys]).catch(() => undefined);
     await cleanupPool.query("DELETE FROM canonical_fixture_evidence WHERE canonical_key = ANY($1::text[])", [fixtureKeys]).catch(() => undefined);
+    await cleanupPool.end();
+  }
+});
+
+
+test("explicit SportAPI identity review persists an audited mapping only for a safe latest candidate", async (t) => {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");
+    return;
+  }
+
+  const trackedTeamId = `ci-reviewed-sportapi-${randomUUID()}`;
+  const goodProviderTeamId = `sportapi-good-${randomUUID()}`;
+  const wrongCountryProviderTeamId = `sportapi-wrong-country-${randomUUID()}`;
+  const searchedAt = new Date().toISOString();
+  const cleanupPool = new Pool({ connectionString, max: 1 });
+  const trackedTeam = {
+    id: trackedTeamId,
+    canonicalName: "15 de Agosto",
+    country: "Angola",
+    league: "Girabola",
+    teamCategory: "senior"
+  };
+
+  try {
+    const schema = await getCanonicalEvidenceSummary();
+    assert.equal(schema.state, "ready");
+    await cleanupPool.query(
+      `INSERT INTO team_search_observations
+        (tracked_team_id, tracked_team_name, provider, search_state, provider_team_id, provider_team_name, country, gender, team_type, league, searched_at)
+       VALUES
+        ($1,$2,'sportapi-ai','success',$3,'15 de Agosto','Angola','male','senior','Girabola',$5),
+        ($1,$2,'sportapi-ai','success',$4,'15 de Agosto','France','male','senior','Foreign League',$5)`,
+      [trackedTeamId, trackedTeam.canonicalName, goodProviderTeamId, wrongCountryProviderTeamId, searchedAt]
+    );
+
+    const rejected = await saveReviewedSportApiTeamIdentityMapping({
+      trackedTeamId, providerTeamId: wrongCountryProviderTeamId, reviewedBy: "integration-test"
+    }, [trackedTeam]);
+    assert.equal(rejected.state, "unsafe_candidate");
+    assert.equal(rejected.reason, "candidate_country_must_match_watchlist_country");
+
+    const saved = await saveReviewedSportApiTeamIdentityMapping({
+      trackedTeamId, providerTeamId: goodProviderTeamId, reviewedBy: "integration-test"
+    }, [trackedTeam]);
+    assert.equal(saved.state, "saved");
+    assert.equal(saved.mapping?.providerTeamId, goodProviderTeamId);
+    assert.equal(saved.mapping?.reviewedBy, "integration-test");
+
+    const reviewedIds = await getReviewedProviderTeamIdentityMap();
+    assert.equal(reviewedIds[`sportapi-ai:${goodProviderTeamId}`], trackedTeamId);
+    assert.equal(reviewedIds[`sportapi-ai:${wrongCountryProviderTeamId}`], undefined);
+
+    const audit = await cleanupPool.query(
+      "SELECT provider_team_id, reviewed_by, action FROM provider_identity_review_events WHERE tracked_team_id = $1",
+      [trackedTeamId]
+    );
+    assert.equal(audit.rowCount, 1);
+    assert.equal(audit.rows[0]?.provider_team_id, goodProviderTeamId);
+    assert.equal(audit.rows[0]?.reviewed_by, "integration-test");
+    assert.equal(audit.rows[0]?.action, "confirmed");
+  } finally {
+    await cleanupPool.query("DELETE FROM provider_identity_review_events WHERE tracked_team_id = $1", [trackedTeamId]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM team_identity_mappings WHERE tracked_team_id = $1 AND provider = 'sportapi-ai'", [trackedTeamId]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM team_search_observations WHERE tracked_team_id = $1 AND provider = 'sportapi-ai'", [trackedTeamId]).catch(() => undefined);
+    await cleanupPool.end();
+  }
+});
+
+
+test("SportAPI identity approval requires saved safe candidate context, prevents collisions and records an audit event", async (t) => {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");
+    return;
+  }
+
+  const suffix = randomUUID();
+  const trackedTeamId = `review-team-${suffix}`;
+  const secondTeamId = `review-team-second-${suffix}`;
+  const legacyTeamId = `review-team-legacy-${suffix}`;
+  const providerTeamId = `sportapi-team-${suffix}`;
+  const trackedTeams = [
+    { id: trackedTeamId, canonicalName: `Review Club ${suffix}`, country: "Angola", teamCategory: "senior" },
+    { id: secondTeamId, canonicalName: `Review Club ${suffix}`, country: "Angola", teamCategory: "senior" },
+    { id: legacyTeamId, canonicalName: `Legacy Single Provider ${suffix}`, country: "Angola", teamCategory: "senior" }
+  ];
+  const cleanupPool = new Pool({ connectionString, max: 1 });
+  try {
+    const absent = await saveReviewedSportApiTeamIdentityMapping({
+      trackedTeamId, providerTeamId, reviewedBy: "integration-test"
+    }, trackedTeams);
+    assert.equal(absent.state, "candidate_not_found");
+
+    const persisted = await persistTeamSearchObservations([{
+      trackedTeamId,
+      canonicalName: trackedTeams[0]!.canonicalName,
+      providers: [{
+        provider: "sportapi-ai",
+        state: "success",
+        candidates: [{
+          provider: "sportapi-ai",
+          providerTeamId,
+          name: trackedTeams[0]!.canonicalName,
+          country: "Angola",
+          gender: "male",
+          teamType: "senior",
+          league: "Girabola"
+        }]
+      }]
+    }]);
+    assert.equal(persisted.state, "saved");
+
+    const saved = await saveReviewedSportApiTeamIdentityMapping({
+      trackedTeamId, providerTeamId, reviewedBy: "integration-test"
+    }, trackedTeams);
+    assert.equal(saved.state, "saved");
+    assert.equal(saved.mapping?.providerTeamId, providerTeamId);
+    assert.equal(saved.mapping?.reviewedBy, "integration-test");
+
+    await cleanupPool.query(
+      `INSERT INTO team_identity_mappings
+        (tracked_team_id, canonical_name, provider, mapping_state, provider_identity_state,
+         provider_team_id, provider_team_name, country)
+       VALUES ($1,$2,'api-football','confirmed','cross_provider_confirmed',$3,$2,'Angola')`,
+      [legacyTeamId, trackedTeams[2]!.canonicalName, `legacy-provider-id-${suffix}`]
+    );
+    const repaired = await repairLegacyTeamIdentityStates();
+    assert.equal(repaired.state, "ready");
+    const mappings = await getStoredTeamIdentityMappings(trackedTeams);
+    assert.equal(mappings.state, "ready");
+    const team = mappings.teams.find(item => item.trackedTeamId === trackedTeamId);
+    assert.equal(team?.state, "confirmed");
+    assert.equal(team?.providers.find(item => item.provider === "sportapi-ai")?.providerIdentityState, "operator_reviewed");
+    const legacy = mappings.teams.find(item => item.trackedTeamId === legacyTeamId);
+    assert.equal(legacy?.providers.find(item => item.provider === "api-football")?.providerIdentityState, "needs_review");
+
+    const secondSearch = await persistTeamSearchObservations([{
+      trackedTeamId: secondTeamId,
+      canonicalName: trackedTeams[1]!.canonicalName,
+      providers: [{
+        provider: "sportapi-ai",
+        state: "success",
+        candidates: [{
+          provider: "sportapi-ai",
+          providerTeamId,
+          name: trackedTeams[1]!.canonicalName,
+          country: "Angola",
+          gender: "male",
+          teamType: "senior",
+          league: "Girabola"
+        }]
+      }]
+    }]);
+    assert.equal(secondSearch.state, "saved");
+    const collision = await saveReviewedSportApiTeamIdentityMapping({
+      trackedTeamId: secondTeamId, providerTeamId, reviewedBy: "integration-test"
+    }, trackedTeams);
+    assert.equal(collision.state, "conflict");
+
+    const audit = await cleanupPool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM provider_identity_review_events
+       WHERE tracked_team_id = $1 AND provider = 'sportapi-ai' AND provider_team_id = $2 AND reviewed_by = $3`,
+      [trackedTeamId, providerTeamId, "integration-test"]
+    );
+    assert.equal(Number(audit.rows[0]?.count), 1);
+  } finally {
+    await cleanupPool.query("DELETE FROM provider_identity_review_events WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId, legacyTeamId]]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM team_identity_mappings WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId, legacyTeamId]]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM team_search_observations WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId, legacyTeamId]]).catch(() => undefined);
     await cleanupPool.end();
   }
 });

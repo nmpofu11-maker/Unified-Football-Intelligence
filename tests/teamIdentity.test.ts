@@ -308,3 +308,70 @@ test("a provider-scoped candidate never promotes an unresolved team to cross-pro
   assert.equal(classifyProviderIdentityState(resolution.state, true, assessment?.reviewState), "provider_candidate");
   assert.ok(!resolution.reasons.includes("unique_exact_name_and_country_match_across_two_providers"));
 });
+
+
+test("provider metadata and missing country context prevent unsafe identity confirmation", () => {
+  const tracked = {
+    id: "club-brugge-senior",
+    canonicalName: "Club Brugge KV",
+    country: "Belgium",
+    teamCategory: "senior"
+  };
+  const missingCountry = reviewTeamSearchCandidates(tracked, [{
+    provider: "sportapi-ai",
+    candidates: [{ providerTeamId: "no-country", name: "Club Brugge KV" }]
+  }])[0];
+  assert.equal(missingCountry?.countryMatch, "unknown");
+  assert.equal(missingCountry?.reviewState, "needs_review");
+
+  const womenMetadata = reviewTeamSearchCandidates(tracked, [{
+    provider: "sportapi-ai",
+    candidates: [{ providerTeamId: "women", name: "Club Brugge KV", country: "Belgium", gender: "female", teamType: "senior" }]
+  }])[0];
+  assert.equal(womenMetadata?.categoryMatch, "mismatch");
+  assert.equal(womenMetadata?.reviewState, "needs_review");
+
+  const reserveMetadata = reviewTeamSearchCandidates(tracked, [{
+    provider: "sportapi-ai",
+    candidates: [{ providerTeamId: "reserve", name: "Club Brugge KV", country: "Belgium", teamType: "reserve" }]
+  }])[0];
+  assert.equal(reserveMetadata?.categoryMatch, "mismatch");
+  assert.equal(reserveMetadata?.reviewState, "needs_review");
+});
+
+
+test("SportAPI identity review uses country and squad metadata, not name alone", () => {
+  const tracked = {
+    id: "15-de-agosto-angola",
+    canonicalName: "15 de Agosto",
+    country: "Angola",
+    teamCategory: "senior"
+  };
+  const correct = reviewTeamSearchCandidates(tracked, [{
+    provider: "sportapi-ai",
+    candidates: [{
+      providerTeamId: "ao-15-agosto",
+      name: "15 de Agosto",
+      country: "Angola",
+      gender: "male",
+      teamType: "senior",
+      league: "Girabola"
+    }]
+  }])[0];
+  assert.equal(correct?.countryMatch, "match");
+  assert.equal(correct?.categoryMatch, "match");
+  assert.equal(correct?.reviewState, "candidate_matches_watchlist_context");
+
+  const wrongCountry = reviewTeamSearchCandidates(tracked, [{
+    provider: "sportapi-ai",
+    candidates: [{
+      providerTeamId: "european-15-agosto",
+      name: "15 de Agosto",
+      country: "Portugal",
+      gender: "male",
+      teamType: "senior"
+    }]
+  }])[0];
+  assert.equal(wrongCountry?.countryMatch, "conflict");
+  assert.equal(wrongCountry?.reviewState, "needs_review");
+});
