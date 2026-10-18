@@ -185,14 +185,17 @@ test("replay preserves existing canonical rows when supplied provider IDs are un
     }
 
     const unreviewedCandidate: ProviderFixtureCandidate = {
-      ...candidate(),
       provider: "api-football",
       providerFixtureId: `ci-unmapped-provider-fixture-${randomUUID()}`,
+      kickoffUtc,
       home: { name: "Snapshot Home FC", providerTeamId: "unreviewed-home-id" },
       away: { name: "Snapshot Away FC", providerTeamId: "unreviewed-away-id" },
+      competition: { name: "Snapshot Test League" },
       status: "finished",
       score: { home: 1, away: 0 },
       observedAt,
+      evidenceState: "unverified",
+      rawStatus: "FT",
       provenance: {
         provider: "api-football",
         providerRecordId: "unreviewed-provider-fixture",
