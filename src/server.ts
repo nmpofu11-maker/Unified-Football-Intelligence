@@ -4,6 +4,7 @@ import express, { type Request, type Response } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { aggregateProviderStatus } from "./status/aggregate.js";
 import { createTicket, listTickets, reconcilePendingTickets } from "./tickets/store.js";
+import { loadOutOfSampleEvaluation } from "./evaluation/store.js";
 import type { ProviderDiagnostics } from "./providers/provider.js";
 import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { validateHistoricalDateRange } from "./providers/dateRange.js";
@@ -681,6 +682,19 @@ app.get("/api/tickets", async (req: Request, res: Response) => {
 app.post("/api/tickets/reconcile", async (req: Request, res: Response) => {
   if (!ticketAccessAllowed(req, res)) return;
   const result = await reconcilePendingTickets();
+  return res.status(result.state === "ready" ? 200 : 503).json(result);
+});
+
+app.get("/api/evaluation/out-of-sample", async (_req: Request, res: Response) => {
+  const storage = await predictionStorageStatus();
+  if (storage.state !== "ready") {
+    return res.status(503).json({
+      state: "unavailable",
+      reason: storage.state === "not_configured" ? "database_not_configured" : "prediction_storage_not_ready",
+      metrics: null
+    });
+  }
+  const result = await loadOutOfSampleEvaluation(30);
   return res.status(result.state === "ready" ? 200 : 503).json(result);
 });
 
