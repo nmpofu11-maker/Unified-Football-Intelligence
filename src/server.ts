@@ -347,7 +347,11 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
   // Re-evaluate pending tickets after each fresh provider result-ingestion cycle.
   // Settlement uses only the canonical verified-result table, never raw observations.
   const ticketSettlement = await reconcilePendingTickets();
-  const reconciliationPreview = previewCandidateReconciliation(candidates);
+  const reviewedTeamIds = await getReviewedProviderTeamIdentityMap();
+  const reconciliationPreview = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
+  const unmappedProviderIdentityCandidates = candidates.filter(candidate =>
+    !hasCompleteReviewedProviderTeamIdentityCoverage([candidate], reviewedTeamIds)
+  ).length;
   const byStatus: Record<string, number> = {};
   for (const candidate of candidates) byStatus[candidate.status] = (byStatus[candidate.status] ?? 0) + 1;
   const payload = {
