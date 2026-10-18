@@ -10,10 +10,10 @@ import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { validateHistoricalDateRange } from "./providers/dateRange.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
-import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
+import { hasCompleteReviewedProviderTeamIdentityCoverage, previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
 import { curatedTeamSearchAliases, discoverTrackedTeamIdentities, reviewTeamSearchCandidates } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getReviewedProviderTeamIdentityMap, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 import { listReviewedTeamAliases, listReviewedTeamMappings, listSavedPredictions, predictStoredFixture, predictionStorageStatus, saveReviewedTeamAlias, saveReviewedTeamMapping } from "./prediction/pipeline.js";
 
 const app = express();
@@ -278,7 +278,11 @@ app.get("/api/providers/history", async (req: Request, res: Response) => {
   const persistence = await persistProviderObservations(candidates);
   const canonicalEvidence = await persistCanonicalEvidence(candidates);
   const ticketSettlement = await reconcilePendingTickets();
-  const reconciliationPreview = previewCandidateReconciliation(candidates);
+  const reviewedTeamIds = await getReviewedProviderTeamIdentityMap();
+  const reconciliationPreview = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
+  const unmappedProviderIdentityCandidates = candidates.filter(candidate =>
+    !hasCompleteReviewedProviderTeamIdentityCoverage([candidate], reviewedTeamIds)
+  ).length;
   const candidateCountsByStatus: Record<string, number> = {};
   for (const candidate of candidates) {
     candidateCountsByStatus[candidate.status] = (candidateCountsByStatus[candidate.status] ?? 0) + 1;
@@ -297,6 +301,7 @@ app.get("/api/providers/history", async (req: Request, res: Response) => {
     canonicalEvidence,
     reconciliation: {
       groups: reconciliationPreview.length,
+      unmappedProviderIdentityCandidates,
       corroborated: reconciliationPreview.filter(item => item.state === "corroborated").length,
       conflicted: reconciliationPreview.filter(item => item.state === "conflicted").length,
       singleSource: reconciliationPreview.filter(item => item.state === "single_source").length
@@ -359,6 +364,7 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     candidateCountsByStatus: byStatus,
     reconciliationSummary: {
       groups: reconciliationPreview.length,
+      unmappedProviderIdentityCandidates,
       corroborated: reconciliationPreview.filter(item => item.state === "corroborated").length,
       conflicted: reconciliationPreview.filter(item => item.state === "conflicted").length,
       singleSource: reconciliationPreview.filter(item => item.state === "single_source").length
