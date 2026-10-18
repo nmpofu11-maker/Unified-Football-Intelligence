@@ -7,7 +7,7 @@ type State = "ready" | "not_configured" | "error";
 
 /** Exact reviewed names are compared case-insensitively with whitespace collapsed; no fuzzy matching. */
 function normalizeTeamMappingKey(value: string): string {
-  return value.trim().replace(/\\s+/g, " ").toLowerCase();
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -72,7 +72,7 @@ export async function saveReviewedTeamMapping(input: PredictionTeamMapping) {
   if (teamId.length > 160 || canonicalName.length > 200 || reviewedBy.length > 160) {
     return { state: "invalid_input" as const, reason: "mapping_field_too_long" };
   }
-  if (/[\\r\\n\\t]/.test(teamId + canonicalName + reviewedBy)) {
+  if (/[\r\n\t]/.test(teamId + canonicalName + reviewedBy)) {
     return { state: "invalid_input" as const, reason: "mapping_fields_must_not_contain_control_characters" };
   }
   try {
@@ -116,14 +116,14 @@ export interface PredictionTeamAlias {
 
 export async function saveReviewedTeamAlias(input: PredictionTeamAlias) {
   const teamId = input.teamId.trim();
-  const alias = input.alias.trim().replace(/\\s+/g, " ");
+  const alias = input.alias.trim().replace(/\s+/g, " ");
   const reviewedBy = input.reviewedBy.trim();
   const aliasKey = normalizeTeamMappingKey(alias);
   if (!teamId || !alias || !reviewedBy) return { state: "invalid_input" as const, reason: "teamId_alias_and_reviewedBy_are_required" };
   if (teamId.length > 160 || alias.length > 200 || reviewedBy.length > 160 || !aliasKey) {
     return { state: "invalid_input" as const, reason: "alias_field_too_long_or_invalid" };
   }
-  if (/[\\r\\n\\t]/.test(teamId + alias + reviewedBy)) {
+  if (/[\r\n\t]/.test(teamId + alias + reviewedBy)) {
     return { state: "invalid_input" as const, reason: "alias_fields_must_not_contain_control_characters" };
   }
   try {
