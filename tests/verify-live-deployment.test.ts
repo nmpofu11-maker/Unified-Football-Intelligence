@@ -12,6 +12,8 @@ const paths = [
   "/api/teams/watchlist"
 ];
 
+const expectedNames = Array.from({length:80}, (_,i)=>`Favourite Team ${i+1}`);
+
 function healthyEndpoints() {
   const data: Record<string, unknown> = {
     "/health": { readiness: { database: true }, calibratedPredictionsAvailable: false, bettingRecommendationsEnabled: false },
@@ -25,13 +27,13 @@ function healthyEndpoints() {
     }},
     "/api/predictions/status": { state: "ready", teamMappingsState: "ready", calibratedForBetting: false, bettingRecommendationsEnabled: false },
     "/api/history/status": { state: "canonical_evidence", seededTeamNames: 80, canonicalFixtures: 10, verifiedSettledResults: 12 },
-    "/api/teams/watchlist": { count: 80, teams: Array.from({length:80}, (_,i)=>({id:String(i+1)})) }
+    "/api/teams/watchlist": { count: 80, teams: expectedNames.map((canonicalName,i)=>({id:String(i+1),canonicalName})) }
   };
   return paths.map(path => ({ path, httpStatus: 200, ok: true, data: data[path] }));
 }
 
 test("live verifier passes only when operational evidence stages are available and betting remains disabled", () => {
-  const report = evaluateLiveVerification("https://example.test", healthyEndpoints());
+  const report = evaluateLiveVerification("https://example.test", healthyEndpoints(), expectedNames);
   assert.equal(report.overall, "PASS");
   assert.equal(report.evidencePipelineReady, true);
   assert.equal(report.bettingRecommendationsEnabled, false);
@@ -41,7 +43,7 @@ test("live verifier warns when deployment is reachable but verified results are 
   const endpoints = healthyEndpoints();
   const pipeline = endpoints.find(item => item.path === "/api/data-pipeline/status")!;
   (pipeline.data as any).stages.verifiedResults = { state: "empty", count: 0 };
-  const report = evaluateLiveVerification("https://example.test", endpoints);
+  const report = evaluateLiveVerification("https://example.test", endpoints, expectedNames);
   assert.equal(report.overall, "WARN");
   assert.equal(report.evidencePipelineReady, false);
   assert.ok(report.nextActions.some(action => action.includes("historical results")));
@@ -66,4 +68,13 @@ test("live endpoint fetch refuses non-local HTTP and never follows redirects", a
   }) as typeof fetch);
   assert.equal(requested, paths.length);
   assert.ok(results.every(result => result.ok));
+});
+
+test("live verifier fails if one favourite name changes even when the count stays at 80", () => {
+  const endpoints = healthyEndpoints();
+  const watchlist = endpoints.find(item => item.path === "/api/teams/watchlist")!;
+  (watchlist.data as any).teams[0].canonicalName = "A different club";
+  const report = evaluateLiveVerification("https://example.test", endpoints, expectedNames);
+  assert.equal(report.overall, "FAIL");
+  assert.ok(report.checks.some(item => item.name === "authoritative-watchlist" && item.state === "fail"));
 });
