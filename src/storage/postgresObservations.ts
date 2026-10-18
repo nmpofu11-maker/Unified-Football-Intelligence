@@ -119,9 +119,9 @@ async function ensureSchema(client: PoolClient): Promise<void> {
     CREATE TABLE IF NOT EXISTS team_identity_mappings (
       tracked_team_id TEXT NOT NULL,
       canonical_name TEXT NOT NULL,
-      provider TEXT NOT NULL CHECK (provider IN ('api-football','sportmonks')),
+      provider TEXT NOT NULL CHECK (provider IN ('api-football','sportmonks','sportapi-ai')),
       mapping_state TEXT NOT NULL CHECK (mapping_state IN ('confirmed','ambiguous','unresolved')),
-      provider_identity_state TEXT NOT NULL DEFAULT 'unresolved' CHECK (provider_identity_state IN ('cross_provider_confirmed','provider_candidate','needs_review','ambiguous','unresolved')),
+      provider_identity_state TEXT NOT NULL DEFAULT 'unresolved' CHECK (provider_identity_state IN ('cross_provider_confirmed','operator_reviewed','provider_candidate','needs_review','ambiguous','unresolved')),
       provider_team_id TEXT,
       provider_team_name TEXT,
       country TEXT,
@@ -132,12 +132,33 @@ async function ensureSchema(client: PoolClient): Promise<void> {
     )
   `);
   await client.query(`ALTER TABLE team_identity_mappings ADD COLUMN IF NOT EXISTS provider_identity_state TEXT NOT NULL DEFAULT 'unresolved'`);
+  await client.query(`ALTER TABLE team_identity_mappings DROP CONSTRAINT IF EXISTS team_identity_mappings_provider_check`);
+  await client.query(`ALTER TABLE team_identity_mappings ADD CONSTRAINT team_identity_mappings_provider_check CHECK (provider IN ('api-football','sportmonks','sportapi-ai'))`);
+  await client.query(`ALTER TABLE team_identity_mappings DROP CONSTRAINT IF EXISTS team_identity_mappings_provider_identity_state_check`);
+  await client.query(`ALTER TABLE team_identity_mappings ADD CONSTRAINT team_identity_mappings_provider_identity_state_check CHECK (provider_identity_state IN ('cross_provider_confirmed','operator_reviewed','provider_candidate','needs_review','ambiguous','unresolved'))`);
   await client.query(`
     UPDATE team_identity_mappings SET provider_identity_state = CASE
       WHEN mapping_state = 'confirmed' THEN 'cross_provider_confirmed'
       WHEN mapping_state = 'ambiguous' THEN 'ambiguous'
       ELSE 'unresolved' END
     WHERE provider_identity_state = 'unresolved' AND mapping_state <> 'unresolved'
+  `);
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS provider_identity_review_events (
+      id BIGSERIAL PRIMARY KEY,
+      tracked_team_id TEXT NOT NULL,
+      provider TEXT NOT NULL CHECK (provider IN ('sportapi-ai')),
+      provider_team_id TEXT NOT NULL,
+      provider_team_name TEXT NOT NULL,
+      reviewed_by TEXT NOT NULL,
+      action TEXT NOT NULL CHECK (action IN ('confirmed')),
+      reasons TEXT[] NOT NULL DEFAULT '{}',
+      reviewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS provider_identity_review_events_lookup_idx
+    ON provider_identity_review_events (tracked_team_id, provider, reviewed_at DESC)
   `);
   await client.query(`
     CREATE TABLE IF NOT EXISTS canonical_fixture_evidence (
@@ -179,7 +200,7 @@ async function loadReviewedProviderTeamIdentityMap(client: PoolClient): Promise<
   }>(`SELECT provider, provider_team_id, tracked_team_id
       FROM team_identity_mappings
       WHERE mapping_state = 'confirmed'
-        AND provider_identity_state = 'cross_provider_confirmed'
+        AND provider_identity_state IN ('cross_provider_confirmed','operator_reviewed')
         AND provider_team_id IS NOT NULL`);
   const mappings: ReviewedProviderTeamIdentityMap = {};
   for (const row of result.rows) {
@@ -364,7 +385,7 @@ export async function persistCanonicalEvidence(
     // cleanup for the API-Football/Sportmonks identities that can be reviewed here.
     const snapshotCandidates = candidates.filter(candidate =>
       !(candidate.provider === "sportapi-ai" &&
-        (candidate.home.providerTeamId?.trim() || candidate.away.providerTeamId?.trim()))
+        !hasCompleteReviewedProviderTeamIdentityCoverage([candidate], reviewedTeamIds))
     );
     const snapshotIdentityComplete = hasCompleteReviewedProviderTeamIdentityCoverage(snapshotCandidates, reviewedTeamIds);
     await client.query("BEGIN");
@@ -1133,7 +1154,7 @@ export interface StoredTeamIdentityMapping {
   trackedTeamId: string;
   canonicalName: string;
   state: "confirmed" | "ambiguous" | "unresolved";
-  providers: Array<{ provider: "api-football" | "sportmonks"; providerIdentityState: "cross_provider_confirmed" | "provider_candidate" | "needs_review" | "ambiguous" | "unresolved"; providerTeamId?: string; providerTeamName?: string; country?: string; reasons: string[]; updatedAt: string }>;
+  providers: Array<{ provider: "api-football" | "sportmonks" | "sportapi-ai"; providerIdentityState: "cross_provider_confirmed" | "operator_reviewed" | "provider_candidate" | "needs_review" | "ambiguous" | "unresolved"; providerTeamId?: string; providerTeamName?: string; country?: string; reasons: string[]; updatedAt: string }>;
 }
 export async function getStoredTeamIdentityMappings(
   trackedTeams: TrackedTeamIdentity[]
@@ -1145,8 +1166,8 @@ export async function getStoredTeamIdentityMappings(
     client = await configuredPool.connect();
     await ensureSchema(client);
     const result = await client.query<{
-      tracked_team_id: string; canonical_name: string; provider: "api-football" | "sportmonks";
-      mapping_state: "confirmed" | "ambiguous" | "unresolved"; provider_identity_state: "cross_provider_confirmed" | "provider_candidate" | "needs_review" | "ambiguous" | "unresolved"; provider_team_id: string | null;
+      tracked_team_id: string; canonical_name: string; provider: "api-football" | "sportmonks" | "sportapi-ai";
+      mapping_state: "confirmed" | "ambiguous" | "unresolved"; provider_identity_state: "cross_provider_confirmed" | "operator_reviewed" | "provider_candidate" | "needs_review" | "ambiguous" | "unresolved"; provider_team_id: string | null;
       provider_team_name: string | null; country: string | null; reasons: string[]; updated_at: Date;
     }>(`SELECT tracked_team_id, canonical_name, provider, mapping_state, provider_identity_state, provider_team_id,
                provider_team_name, country, reasons, updated_at
@@ -1166,12 +1187,14 @@ export async function getStoredTeamIdentityMappings(
         ...(row.country ? { country: row.country } : {}),
         reasons: row.reasons, updatedAt: row.updated_at.toISOString()
       });
-      team.state = row.mapping_state;
+      if (row.mapping_state === "confirmed") team.state = "confirmed";
+      else if (row.mapping_state === "ambiguous" && team.state !== "confirmed") team.state = "ambiguous";
+      else if (team.state !== "confirmed" && team.state !== "ambiguous") team.state = "unresolved";
     }
     const teams = [...mapped.values()];
     return {
       state: "ready",
-      confirmed: teams.filter(team => team.state === "confirmed" && team.providers.length === 2).length,
+      confirmed: teams.filter(team => team.state === "confirmed" && team.providers.length >= 1).length,
       ambiguous: teams.filter(team => team.state === "ambiguous").length,
       unresolved: teams.filter(team => team.state === "unresolved").length,
       providerCandidates: teams.reduce((sum, team) => sum + team.providers.filter(provider => provider.providerIdentityState === "provider_candidate").length, 0),
