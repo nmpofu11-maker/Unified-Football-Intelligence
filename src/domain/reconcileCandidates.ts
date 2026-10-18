@@ -53,12 +53,51 @@ function canonicalName(value: string, aliases: Record<string, string>): string {
   return aliases[normalized] ?? normalized;
 }
 
-function baseKey(f: ProviderFixtureCandidate): string {
+export type ReviewedProviderTeamIdentityMap = Record<string, string>;
+
+/**
+ * A supplied provider ID always takes precedence over a name. If either side has
+ * an ID, both IDs must resolve to distinct reviewed canonical identities.
+ */
+function baseKey(
+  f: ProviderFixtureCandidate,
+  reviewedTeamIds: ReviewedProviderTeamIdentityMap
+): string | undefined {
+  const homeProviderId = f.home.providerTeamId?.trim();
+  const awayProviderId = f.away.providerTeamId?.trim();
+  if (homeProviderId || awayProviderId) {
+    if (!homeProviderId || !awayProviderId) return undefined;
+    const homeId = reviewedTeamIds[`${f.provider}:${homeProviderId}`];
+    const awayId = reviewedTeamIds[`${f.provider}:${awayProviderId}`];
+    if (!homeId || !awayId || homeId === awayId) return undefined;
+    return [
+      `team-id:${homeId}`,
+      `team-id:${awayId}`,
+      canonicalName(f.competition.name, COMPETITION_ALIASES)
+    ].join("|");
+  }
+  // Only feeds that genuinely omit team IDs may use exact curated-name matching.
   return [
     canonicalName(f.home.name, TEAM_ALIASES),
     canonicalName(f.away.name, TEAM_ALIASES),
     canonicalName(f.competition.name, COMPETITION_ALIASES)
   ].join("|");
+}
+
+/** Every supplied team ID must have a reviewed, distinct canonical mapping. */
+export function hasCompleteReviewedProviderTeamIdentityCoverage(
+  candidates: ProviderFixtureCandidate[],
+  reviewedTeamIds: ReviewedProviderTeamIdentityMap
+): boolean {
+  return candidates.every(candidate => {
+    const homeProviderId = candidate.home.providerTeamId?.trim();
+    const awayProviderId = candidate.away.providerTeamId?.trim();
+    if (!homeProviderId && !awayProviderId) return true;
+    if (!homeProviderId || !awayProviderId) return false;
+    const homeId = reviewedTeamIds[`${candidate.provider}:${homeProviderId}`];
+    const awayId = reviewedTeamIds[`${candidate.provider}:${awayProviderId}`];
+    return Boolean(homeId && awayId && homeId !== awayId);
+  });
 }
 
 /**
@@ -69,7 +108,8 @@ function baseKey(f: ProviderFixtureCandidate): string {
 export function previewCandidateReconciliation(
   candidates: ProviderFixtureCandidate[],
   kickoffToleranceMs = 5 * 60_000,
-  nowMs = Date.now()
+  nowMs = Date.now(),
+  reviewedTeamIds: ReviewedProviderTeamIdentityMap = {}
 ): CandidateMatchPreview[] {
   const buckets = new Map<string, ProviderFixtureCandidate[]>();
   for (const candidate of candidates) {
