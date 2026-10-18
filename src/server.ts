@@ -6,6 +6,7 @@ import { aggregateProviderStatus } from "./status/aggregate.js";
 import { createTicket, listTickets, reconcilePendingTickets } from "./tickets/store.js";
 import type { ProviderDiagnostics } from "./providers/provider.js";
 import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
+import { validateHistoricalDateRange } from "./providers/dateRange.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
 import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
@@ -102,6 +103,63 @@ app.get("/api/storage/observations/summary", async (_req: Request, res: Response
 app.get("/api/providers/status", (_req: Request, res: Response) => {
   const providers = providerStatus();
   res.json({ ...aggregateProviderStatus(providers.map(p => p.diagnostics)), providers });
+});
+
+app.get("/api/providers/history", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+  const now = Date.now();
+  const ip = req.ip || "unknown";
+  const recent = (requestWindows.get(ip) ?? []).filter(t => now - t < 60_000);
+  if (recent.length >= 6) return res.status(429).json({ state: "rate_limited", reason: "provider_check_limit_6_per_minute" });
+  recent.push(now); requestWindows.set(ip, recent);
+  const from = typeof req.query.from === "string" ? req.query.from : "";
+  const to = typeof req.query.to === "string" ? req.query.to : "";
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const range = validateHistoricalDateRange(from, to, todayUtc, 7);
+  if (range.state !== "valid") return res.status(400).json({ state: "invalid_request", reason: range.reason });
+
+  const query = { dateFromUtc: range.from, dateToUtc: range.to };
+  const [sportApiAi, sportmonks, apiFootball] = await Promise.all([
+    sportApiAiProvider.fetchFixtures(query),
+    sportmonksProvider.fetchFixtures(query),
+    apiFootballProvider.fetchFixtures(query)
+  ]);
+  const candidates = [...sportApiAi, ...sportmonks, ...apiFootball];
+  const persistence = await persistProviderObservations(candidates);
+  const canonicalEvidence = await persistCanonicalEvidence(candidates);
+  const ticketSettlement = await reconcilePendingTickets();
+  const reconciliationPreview = previewCandidateReconciliation(candidates);
+  const candidateCountsByStatus: Record<string, number> = {};
+  for (const candidate of candidates) {
+    candidateCountsByStatus[candidate.status] = (candidateCountsByStatus[candidate.status] ?? 0) + 1;
+  }
+  return res.json({
+    state: "historical_ingestion_completed",
+    range: { from: range.from, to: range.to, daysInclusive: range.daysInclusive },
+    candidateCount: candidates.length,
+    candidateCountsByProvider: { "sportapi-ai": sportApiAi.length, sportmonks: sportmonks.length, "api-football": apiFootball.length },
+    candidateCountsByStatus,
+    corroboratedFixtures: canonicalEvidence.corroboratedFixtures,
+    verifiedSettledResults: canonicalEvidence.verifiedResults,
+    conflictedGroups: canonicalEvidence.conflictedGroups,
+    ticketSettlement,
+    persistence,
+    canonicalEvidence,
+    reconciliation: {
+      groups: reconciliationPreview.length,
+      corroborated: reconciliationPreview.filter(item => item.state === "corroborated").length,
+      conflicted: reconciliationPreview.filter(item => item.state === "conflicted").length,
+      singleSource: reconciliationPreview.filter(item => item.state === "single_source").length
+    },
+    note: "Only finished scores corroborated by at least two providers are promoted to verified settled results. A successful request or nonzero candidate count does not guarantee verified history was created."
+  });
 });
 
 app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
