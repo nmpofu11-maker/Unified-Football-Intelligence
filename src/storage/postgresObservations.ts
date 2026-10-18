@@ -136,12 +136,46 @@ async function ensureSchema(client: PoolClient): Promise<void> {
   await client.query(`ALTER TABLE team_identity_mappings ADD CONSTRAINT team_identity_mappings_provider_check CHECK (provider IN ('api-football','sportmonks','sportapi-ai'))`);
   await client.query(`ALTER TABLE team_identity_mappings DROP CONSTRAINT IF EXISTS team_identity_mappings_provider_identity_state_check`);
   await client.query(`ALTER TABLE team_identity_mappings ADD CONSTRAINT team_identity_mappings_provider_identity_state_check CHECK (provider_identity_state IN ('cross_provider_confirmed','operator_reviewed','provider_candidate','needs_review','ambiguous','unresolved'))`);
+  // Legacy rows must not be promoted to cross-provider-confirmed merely because
+  // their old mapping_state says "confirmed". Require a distinct confirmed ID from
+  // the other supported primary provider; single-provider legacy rows need review.
   await client.query(`
-    UPDATE team_identity_mappings SET provider_identity_state = CASE
-      WHEN mapping_state = 'confirmed' THEN 'cross_provider_confirmed'
-      WHEN mapping_state = 'ambiguous' THEN 'ambiguous'
+    UPDATE team_identity_mappings t SET provider_identity_state = CASE
+      WHEN t.mapping_state = 'ambiguous' THEN 'ambiguous'
+      WHEN t.mapping_state = 'confirmed'
+        AND t.provider IN ('api-football','sportmonks')
+        AND t.provider_team_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM team_identity_mappings other
+          WHERE other.tracked_team_id = t.tracked_team_id
+            AND other.provider IN ('api-football','sportmonks')
+            AND other.provider <> t.provider
+            AND other.mapping_state = 'confirmed'
+            AND other.provider_team_id IS NOT NULL
+        ) THEN 'cross_provider_confirmed'
+      WHEN t.mapping_state = 'confirmed' THEN 'needs_review'
       ELSE 'unresolved' END
-    WHERE provider_identity_state = 'unresolved' AND mapping_state <> 'unresolved'
+    WHERE t.provider_identity_state = 'unresolved' AND t.mapping_state <> 'unresolved'
+  `);
+  // Also demote stale legacy claims that were previously labelled cross-provider
+  // without a confirmed primary-provider pair. Preserve explicit operator reviews.
+  await client.query(`
+    UPDATE team_identity_mappings t SET
+      provider_identity_state = 'needs_review',
+      reasons = array_append(t.reasons, 'legacy_cross_provider_claim_without_confirmed_pair')
+    WHERE t.provider_identity_state = 'cross_provider_confirmed'
+      AND NOT (
+        t.provider IN ('api-football','sportmonks')
+        AND t.provider_team_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM team_identity_mappings other
+          WHERE other.tracked_team_id = t.tracked_team_id
+            AND other.provider IN ('api-football','sportmonks')
+            AND other.provider <> t.provider
+            AND other.mapping_state = 'confirmed'
+            AND other.provider_team_id IS NOT NULL
+        )
+      )
   `);
   await client.query(`
     CREATE TABLE IF NOT EXISTS provider_identity_review_events (
