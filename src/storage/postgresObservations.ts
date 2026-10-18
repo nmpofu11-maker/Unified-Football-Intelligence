@@ -359,7 +359,14 @@ export async function persistCanonicalEvidence(
       p.statuses.length === 1 && p.statuses[0] === "finished" &&
       p.scores.length === 1 && !p.reasons.includes("finished_observation_missing_score")
     );
-    const snapshotIdentityComplete = hasCompleteReviewedProviderTeamIdentityCoverage(candidates, reviewedTeamIds);
+    // SportAPI fixture IDs are not yet part of the reviewed mapping registry and
+    // are excluded from canonical matching. They must not permanently block snapshot
+    // cleanup for the API-Football/Sportmonks identities that can be reviewed here.
+    const snapshotCandidates = candidates.filter(candidate =>
+      !(candidate.provider === "sportapi-ai" &&
+        (candidate.home.providerTeamId?.trim() || candidate.away.providerTeamId?.trim()))
+    );
+    const snapshotIdentityComplete = hasCompleteReviewedProviderTeamIdentityCoverage(snapshotCandidates, reviewedTeamIds);
     await client.query("BEGIN");
     // A replay may delete stale canonical keys only when every supplied provider ID
     // is explicitly reviewed and the two sides resolve to distinct canonical teams.
