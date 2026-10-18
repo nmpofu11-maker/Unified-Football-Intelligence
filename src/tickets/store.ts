@@ -117,9 +117,9 @@ function importString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 function normaliseImportLabel(value: string): string {
-  return value.normalize("NFKD").replace(/[\\u0300-\\u036f]/g, "")
-    .toLowerCase().replace(/\\b(fc|afc|sc|cf)\\b/g, " ")
-    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\\s+/g, " ");
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/\b(fc|afc|sc|cf)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 function parseBetMatrixMarket(
   leg: BetMatrixImportLeg,
@@ -131,19 +131,19 @@ function parseBetMatrixMarket(
   const raw = (market + " " + target).toLowerCase().replace(/[_-]+/g, " ");
   const marketNorm = normaliseImportLabel(market);
   const targetNorm = normaliseImportLabel(target);
-  const cleanTarget = targetNorm.replace(/\\b(win|wins|winner|to win)\\b/g, " ").trim().replace(/\\s+/g, " ");
+  const cleanTarget = targetNorm.replace(/\b(win|wins|winner|to win)\b/g, " ").trim().replace(/\s+/g, " ");
 
-  if (/both teams to score|\\bbtts\\b/.test(raw)) {
-    if (/\\b(no|not|false)\\b/.test(target.toLowerCase())) return { market: "btts", pick: "no" };
-    if (/\\b(yes|true)\\b/.test(target.toLowerCase())) return { market: "btts", pick: "yes" };
-    if (/\\bbtts no\\b/.test(raw)) return { market: "btts", pick: "no" };
-    if (/\\bbtts yes\\b/.test(raw)) return { market: "btts", pick: "yes" };
+  if (/both teams to score|\bbtts\b/.test(raw)) {
+    if (/\b(no|not|false)\b/.test(target.toLowerCase())) return { market: "btts", pick: "no" };
+    if (/\b(yes|true)\b/.test(target.toLowerCase())) return { market: "btts", pick: "yes" };
+    if (/\bbtts no\b/.test(raw)) return { market: "btts", pick: "no" };
+    if (/\bbtts yes\b/.test(raw)) return { market: "btts", pick: "yes" };
     return { reason: "btts_selection_must_explicitly_say_yes_or_no" };
   }
   if (/double chance/.test(marketNorm)) {
-    if (/\\b1x\\b|home or draw|home\\/draw|1 or x/.test(raw)) return { market: "double_chance", pick: "home_draw" };
-    if (/\\bx2\\b|draw or away|draw\\/away|x or 2/.test(raw)) return { market: "double_chance", pick: "draw_away" };
-    if (/\\b12\\b|home or away|home\\/away|1 or 2/.test(raw)) return { market: "double_chance", pick: "home_away" };
+    if (/\b1x\b|home or draw|home\/draw|1 or x/.test(raw)) return { market: "double_chance", pick: "home_draw" };
+    if (/\bx2\b|draw or away|draw\/away|x or 2/.test(raw)) return { market: "double_chance", pick: "draw_away" };
+    if (/\b12\b|home or away|home\/away|1 or 2/.test(raw)) return { market: "double_chance", pick: "home_away" };
     const home = normaliseImportLabel(sourceHomeTeam);
     const away = normaliseImportLabel(sourceAwayTeam);
     if (targetNorm.includes(home) && /draw/.test(raw)) return { market: "double_chance", pick: "home_draw" };
@@ -152,24 +152,24 @@ function parseBetMatrixMarket(
     return { reason: "unsupported_or_ambiguous_double_chance_pick" };
   }
   if (/draw no bet/.test(marketNorm)) {
-    if (/\\b(home|1)\\b/.test(target.toLowerCase()) || cleanTarget === normaliseImportLabel(sourceHomeTeam)) return { market: "draw_no_bet", pick: "home" };
-    if (/\\b(away|2)\\b/.test(target.toLowerCase()) || cleanTarget === normaliseImportLabel(sourceAwayTeam)) return { market: "draw_no_bet", pick: "away" };
+    if (/\b(home|1)\b/.test(target.toLowerCase()) || cleanTarget === normaliseImportLabel(sourceHomeTeam)) return { market: "draw_no_bet", pick: "home" };
+    if (/\b(away|2)\b/.test(target.toLowerCase()) || cleanTarget === normaliseImportLabel(sourceAwayTeam)) return { market: "draw_no_bet", pick: "away" };
     return { reason: "draw_no_bet_pick_must_identify_home_or_away_team" };
   }
-  if (/over.?under|total goals|goals over|goals under|\\bo\\/u\\b/.test(raw)) {
-    const numbers = raw.match(/\\d+(?:\\.\\d+)?/g) ?? [];
+  if (/over.?under|total goals|goals over|goals under|\bo\/u\b/.test(raw)) {
+    const numbers = raw.match(/\d+(?:\.\d+)?/g) ?? [];
     const line = numbers.length ? Number(numbers[numbers.length - 1]) : Number.NaN;
     if (!Number.isFinite(line) || line < 0) return { reason: "total_goals_line_missing_or_invalid" };
     const targetLower = target.toLowerCase();
-    const over = /\\bover\\b/.test(targetLower) || (/\\bover\\b/.test(market.toLowerCase()) && !/\\bunder\\b/.test(market.toLowerCase()));
-    const under = /\\bunder\\b/.test(targetLower) || (/\\bunder\\b/.test(market.toLowerCase()) && !/\\bover\\b/.test(market.toLowerCase()));
+    const over = /\bover\b/.test(targetLower) || (/\bover\b/.test(market.toLowerCase()) && !/\bunder\b/.test(market.toLowerCase()));
+    const under = /\bunder\b/.test(targetLower) || (/\bunder\b/.test(market.toLowerCase()) && !/\bover\b/.test(market.toLowerCase()));
     if (over === under) return { reason: "total_goals_pick_must_explicitly_say_over_or_under" };
     return { market: "total_goals", pick: over ? "over" : "under", line };
   }
-  if (/1x2|match result|full.?time result|match winner|moneyline|\\bwinner\\b|\\bresult\\b|\\bfull time\\b/.test(marketNorm)) {
-    if (/\\b(draw|tie|x)\\b/.test(target.toLowerCase()) || targetNorm === "x") return { market: "1x2", pick: "draw" };
-    if (/\\bhome\\b/.test(target.toLowerCase()) || cleanTarget === "1") return { market: "1x2", pick: "home" };
-    if (/\\baway\\b/.test(target.toLowerCase()) || cleanTarget === "2") return { market: "1x2", pick: "away" };
+  if (/1x2|match result|full.?time result|match winner|moneyline|\bwinner\b|\bresult\b|\bfull time\b/.test(marketNorm)) {
+    if (/\b(draw|tie|x)\b/.test(target.toLowerCase()) || targetNorm === "x") return { market: "1x2", pick: "draw" };
+    if (/\bhome\b/.test(target.toLowerCase()) || cleanTarget === "1") return { market: "1x2", pick: "home" };
+    if (/\baway\b/.test(target.toLowerCase()) || cleanTarget === "2") return { market: "1x2", pick: "away" };
     if (cleanTarget === normaliseImportLabel(sourceHomeTeam)) return { market: "1x2", pick: "home" };
     if (cleanTarget === normaliseImportLabel(sourceAwayTeam)) return { market: "1x2", pick: "away" };
     return { reason: "match_result_pick_does_not_match_either_fixture_team_or_draw" };
@@ -204,7 +204,7 @@ export async function importBetMatrixBackup(payload: unknown) {
     for (const rawLeg of ticket.legs) {
       if (!isRecord(rawLeg)) continue;
       const kickoff = importString(rawLeg.kickoffISO);
-      if (kickoff && Number.isFinite(Date.parse(kickoff)) && /(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(kickoff)) kickoffValues.push(new Date(kickoff).toISOString());
+      if (kickoff && Number.isFinite(Date.parse(kickoff)) && /(?:Z|[+-]\d{2}:?\d{2})$/i.test(kickoff)) kickoffValues.push(new Date(kickoff).toISOString());
     }
   }
   if (totalLegs > 5000) return { state: "invalid_input" as const, reason: "backup_exceeds_5000_total_legs" };
@@ -256,7 +256,7 @@ export async function importBetMatrixBackup(payload: unknown) {
       const targetTeam = importString(leg.targetTeam) ?? "";
       const league = importString(leg.league);
       if (!homeTeam || !awayTeam || !market) { legFailure = { reason: "home_away_and_market_required", legIndex: index }; break; }
-      if (!kickoffISO || !Number.isFinite(Date.parse(kickoffISO)) || !/(?:Z|[+-]\\d{2}:?\\d{2})$/i.test(kickoffISO)) {
+      if (!kickoffISO || !Number.isFinite(Date.parse(kickoffISO)) || !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(kickoffISO)) {
         legFailure = { reason: "fixture_kickoff_required_as_timezone_aware_iso", legIndex: index }; break;
       }
 
