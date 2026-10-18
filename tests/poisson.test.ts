@@ -17,6 +17,9 @@ test("model abstains when verified history is insufficient", () => {
   const out = forecastPoisson({fixtureId:"upcoming",homeTeamId:"A",awayTeamId:"B",kickoffUtc:"2026-03-01T12:00:00.000Z",generatedAt:"2026-02-28T12:00:00.000Z",matches:history(3)});
   assert.equal(out.forecast.evidenceState,"insufficient_evidence");
   assert.ok(out.forecast.abstentionReasons.length > 0);
+  assert.equal(out.forecast.homeWin, null);
+  assert.equal(out.forecast.draw, null);
+  assert.equal(out.forecast.awayWin, null);
   assert.equal(out.diagnostics.expectedHomeGoals,null);
 });
 
@@ -30,4 +33,27 @@ test("model only uses pre-kickoff verified settled matches", () => {
   assert.equal(typeof out.forecast.awayWin, "number");
   assert.ok(Math.abs(out.forecast.homeWin! + out.forecast.draw! + out.forecast.awayWin! - 1) < 0.001);
   assert.equal(out.forecast.evidenceState,"unverified");
+});
+
+
+test("model abstains when configured history threshold is invalid or weakened", () => {
+  const matches = history(12);
+  const base = {fixtureId:"upcoming",homeTeamId:"A",awayTeamId:"B",kickoffUtc:"2026-03-01T12:00:00.000Z",generatedAt:"2026-02-28T12:00:00.000Z",matches};
+  for (const minimumTeamMatches of [0, 1, 4, -1, 1.5, Number.NaN]) {
+    const out = forecastPoisson({...base, minimumTeamMatches});
+    assert.equal(out.forecast.evidenceState, "insufficient_evidence");
+    assert.ok(out.forecast.abstentionReasons.includes("invalid_minimum_team_matches_policy"));
+    assert.equal(out.forecast.homeWin, null);
+    assert.equal(out.forecast.draw, null);
+    assert.equal(out.forecast.awayWin, null);
+  }
+});
+
+test("model abstains when goal-grid configuration is invalid", () => {
+  const out = forecastPoisson({fixtureId:"upcoming",homeTeamId:"A",awayTeamId:"B",kickoffUtc:"2026-03-01T12:00:00.000Z",generatedAt:"2026-02-28T12:00:00.000Z",matches:history(12),maxGoals:0});
+  assert.equal(out.forecast.evidenceState, "insufficient_evidence");
+  assert.ok(out.forecast.abstentionReasons.includes("invalid_max_goals_policy"));
+  assert.equal(out.forecast.homeWin, null);
+  assert.equal(out.forecast.draw, null);
+  assert.equal(out.forecast.awayWin, null);
 });
