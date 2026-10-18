@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 
 export interface LiveEndpointResult {
@@ -38,7 +39,7 @@ const count = (value: unknown): number | null =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 const state = (value: unknown): string => typeof value === "string" ? value : "unknown";
 
-export function evaluateLiveVerification(host: string, endpoints: LiveEndpointResult[]): LiveVerificationReport {
+export function evaluateLiveVerification(host: string, endpoints: LiveEndpointResult[], expectedTeamNames?: string[]): LiveVerificationReport {
   const byPath = new Map(endpoints.map(endpoint => [endpoint.path, endpoint]));
   const checks: LiveVerificationReport["checks"] = [];
   const nextActions: string[] = [];
@@ -91,10 +92,17 @@ export function evaluateLiveVerification(host: string, endpoints: LiveEndpointRe
     `prediction storage=${state(predictions.state)}, team mappings=${state(predictions.teamMappingsState)}`, true,
     "Resolve prediction-storage or reviewed-mapping errors before testing forecasts.");
   const watchlistCount = count(watchlist.count);
-  const watchlistLength = Array.isArray(watchlist.teams) ? watchlist.teams.length : null;
-  check("authoritative-watchlist", watchlistCount === 80 && watchlistLength === 80,
-    `declared count=${watchlistCount === null ? "unknown" : watchlistCount}, returned entries=${watchlistLength ?? "unknown"}`, true,
-    "Restore the complete user-confirmed 80-team watchlist before any discovery run; never replace it with provider-ranked teams.");
+  const watchlistTeams = Array.isArray(watchlist.teams) ? watchlist.teams : null;
+  const watchlistLength = watchlistTeams?.length ?? null;
+  const actualNames = watchlistTeams?.map(team => record(team).canonicalName).filter((name): name is string => typeof name === "string") ?? [];
+  const namesMatch = expectedTeamNames
+    ? actualNames.length === expectedTeamNames.length &&
+      [...actualNames].sort().every((name, index) => name === [...expectedTeamNames].sort()[index])
+    : true;
+  check("authoritative-watchlist", watchlistCount === 80 && watchlistLength === 80 &&
+    actualNames.length === 80 && namesMatch,
+    `declared count=${watchlistCount === null ? "unknown" : watchlistCount}, returned entries=${watchlistLength ?? "unknown"}, exact names match local authoritative seed=${expectedTeamNames ? namesMatch : "not checked"}`, true,
+    "Restore the exact user-confirmed 80-team watchlist before any discovery run; never replace it with provider-ranked teams.");
   check("betting-safety-gate", predictions.calibratedForBetting === false && predictions.bettingRecommendationsEnabled === false,
     `calibratedForBetting=${String(predictions.calibratedForBetting)}, bettingRecommendationsEnabled=${String(predictions.bettingRecommendationsEnabled)}`, true,
     "Keep betting recommendations disabled until genuine chronological out-of-sample calibration is independently established.");
@@ -155,7 +163,12 @@ async function main(): Promise<void> {
   let report: LiveVerificationReport;
   try {
     const endpoints = await fetchLiveEndpoints(host);
-    report = evaluateLiveVerification(new URL(host).origin, endpoints);
+    const seed = JSON.parse(await readFile(new URL("../src/data/initial-tracked-teams.json", import.meta.url), "utf8")) as { teams?: Array<{ canonicalName?: unknown }> };
+    const expectedTeamNames = Array.isArray(seed.teams)
+      ? seed.teams.map(team => team.canonicalName).filter((name): name is string => typeof name === "string")
+      : [];
+    if (expectedTeamNames.length !== 80) throw new Error("Local authoritative watchlist must contain exactly 80 canonical team names.");
+    report = evaluateLiveVerification(new URL(host).origin, endpoints, expectedTeamNames);
   } catch (error) {
     console.error(error instanceof Error ? error.message : "Invalid deployment host.");
     process.exitCode = 2;
