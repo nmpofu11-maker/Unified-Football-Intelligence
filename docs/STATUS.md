@@ -6,6 +6,7 @@
 - SportAPI.ai, Sportmonks and API-Football fixture adapters with explicit diagnostics.
 - PostgreSQL append-only provider observations and canonical evidence tables.
 - The original 80 favourite-team names remain seeded verbatim; they are not silently rewritten.
+- Prediction identity resolution now supports explicitly reviewed exact-name aliases to bridge verified provider spelling variants; normalized collisions are marked ambiguous and withhold forecasts rather than choosing a team.
 - Provider-native team catalogue search, persisted candidates, conservative cross-provider identity review, paced discovery and watchlist diagnostics.
 - Evidence-gated prediction pipeline that requires a corroborated future fixture, explicitly reviewed team mappings, and verified settled results from the same competition before kickoff.
 - Saved exploratory forecasts include an evidence hash and model diagnostics in a persistent prediction ledger.
