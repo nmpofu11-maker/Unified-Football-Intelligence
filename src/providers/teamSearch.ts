@@ -212,8 +212,8 @@ async function searchSportApiCatalogue(
       if (!candidates) continue;
       for (const candidate of candidates) {
         if (!acceptableNames.has(normaliseSearchName(candidate.name))) continue;
-        if (context.teamCategory === "women" && !/(^| )(women|woman|ladies|w)$/.test(normaliseSearchName(candidate.name))) continue;
-        if (context.teamCategory === "youth" && !/(^| )(u[0-9]{1,2}|youth|academy|junior|juniors)( |$)/.test(normaliseSearchName(candidate.name))) continue;
+        if ((context.teamCategory === "women" || context.teamCategory === "international_women") && !/(^| )(women|woman|ladies|w)$/.test(normaliseSearchName(candidate.name))) continue;
+        if ((context.teamCategory === "youth" || context.teamCategory === "international_youth") && !/(^| )(u[0-9]{1,2}|youth|academy|junior|juniors)( |$)/.test(normaliseSearchName(candidate.name))) continue;
         if (context.teamCategory === "reserve" && !/(^| )(ii|iii|iv|b|res|reserve|reserves)$/.test(normaliseSearchName(candidate.name))) continue;
         if (context.teamCategory === "senior" && /(^| )(women|woman|ladies|w|u[0-9]{1,2}|youth|academy|junior|ii|iii|iv|b|res|reserve|reserves)( |$)/.test(normaliseSearchName(candidate.name))) continue;
         collected.set(candidate.providerTeamId, candidate);
