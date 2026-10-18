@@ -9,6 +9,7 @@ import {
   persistProviderObservations
 } from "../src/storage/postgresObservations.js";
 import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
+import { createTicket, listTickets, reconcilePendingTickets } from "../src/tickets/store.js";
 
 test("PostgreSQL persists raw observations idempotently without promoting them to verified evidence", async (t) => {
   const connectionString = process.env.DATABASE_URL?.trim();
@@ -69,6 +70,80 @@ test("PostgreSQL persists raw observations idempotently without promoting them t
       "DELETE FROM provider_fixture_observations WHERE provider = $1 AND provider_fixture_id = $2",
       ["sportapi-ai", fixtureId]
     ).catch(() => undefined);
+    await cleanupPool.end();
+  }
+});
+
+
+test("PostgreSQL ticket reconciliation marks an accumulator lost immediately when one verified leg loses", async (t) => {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");
+    return;
+  }
+
+  const fixtureId = `ci-ticket-fixture-${randomUUID()}`;
+  const ticketId = `ci-ticket-${randomUUID()}`;
+  const kickoffUtc = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+  const cleanupPool = new Pool({ connectionString, max: 1 });
+
+  try {
+    const schema = await getCanonicalEvidenceSummary();
+    assert.equal(schema.state, "ready");
+
+    await cleanupPool.query(
+      `INSERT INTO canonical_fixture_evidence
+        (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state)
+       VALUES ($1,$2,$3,$4,$5,'finished',$6,'corroborated')`,
+      [fixtureId, kickoffUtc, "Integration Home FC", "Integration Away FC", "Integration Test League", ["sportapi-ai", "sportmonks"]]
+    );
+    await cleanupPool.query(
+      `INSERT INTO verified_settled_results
+        (canonical_key, home_goals, away_goals, providers, evidence_state, verified_at)
+       VALUES ($1,0,2,$2,'verified',NOW())`,
+      [fixtureId, ["sportapi-ai", "sportmonks"]]
+    );
+
+    const created = await createTicket({
+      ticketId,
+      stakeAmount: 10,
+      potentialPayout: 100,
+      selections: [
+        { selectionId: "lost-leg", fixtureId, market: "1x2", pick: "home" },
+        { selectionId: "still-pending-leg", fixtureId: `missing-fixture-${randomUUID()}`, market: "1x2", pick: "home" }
+      ]
+    });
+    assert.equal(created.state, "saved");
+
+    const reconciliation = await reconcilePendingTickets();
+    assert.equal(reconciliation.state, "ready");
+    assert.equal(reconciliation.checked, 1);
+    assert.equal(reconciliation.updated, 1);
+
+    const listed = await listTickets(100);
+    assert.equal(listed.state, "ready");
+    assert.ok("tickets" in listed);
+    const saved = listed.tickets.find((ticket: { ticket_id: string }) => ticket.ticket_id === ticketId) as
+      | { status: string; settlement: { state: string; selections: Array<{ selectionId: string; state: string }> } }
+      | undefined;
+    assert.ok(saved);
+    assert.equal(saved.status, "lost");
+    assert.equal(saved.settlement.state, "lost");
+    assert.equal(saved.settlement.selections.find(selection => selection.selectionId === "lost-leg")?.state, "lost");
+    assert.equal(saved.settlement.selections.find(selection => selection.selectionId === "still-pending-leg")?.state, "pending");
+
+    const events = await cleanupPool.query(
+      "SELECT previous_status, next_status, reason FROM ticket_settlement_events WHERE ticket_id = $1",
+      [ticketId]
+    );
+    assert.equal(events.rowCount, 1);
+    assert.equal(events.rows[0]?.previous_status, "pending");
+    assert.equal(events.rows[0]?.next_status, "lost");
+  } finally {
+    await cleanupPool.query("DELETE FROM ticket_settlement_events WHERE ticket_id = $1", [ticketId]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM ticket_records WHERE ticket_id = $1", [ticketId]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM verified_settled_results WHERE canonical_key = $1", [fixtureId]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM canonical_fixture_evidence WHERE canonical_key = $1", [fixtureId]).catch(() => undefined);
     await cleanupPool.end();
   }
 });
