@@ -1023,7 +1023,9 @@ app.get("/", (_req: Request, res: Response) => res.type("html").send(`<!doctype 
 <p class="muted">Paste a pending-ticket export from BetMatrix as one ticket object, an array, or an object containing a <code>tickets</code> array. This is a controlled import, not an automatic connection to BetMatrix. Tickets are imported only when every provider fixture ID resolves to the same current corroborated canonical fixture. Source result status and odds are not trusted.</p>
 <textarea id="betmatrix-json" rows="8" style="width:100%;box-sizing:border-box;font-family:monospace" placeholder='Paste BetMatrix JSON here — no example ticket is preloaded.'></textarea>
 <div class="row"><button id="import-betmatrix-tickets">Validate and import pending tickets</button><button id="refresh-tickets">Refresh saved tickets</button><button id="reconcile-tickets">Reconcile pending tickets now</button></div>
-<pre id="betmatrix-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No BetMatrix import or ticket refresh run yet.</pre>
+<pre id="betmatrix-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No BetMatrix import run yet.</pre>
+<h3>Saved tickets and settlement</h3>
+<pre id="tickets-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No saved tickets loaded yet.</pre>
 </section>
 <section class="card" style="margin-top:14px"><h2>Favourite-team identity discovery</h2><p class="muted">Searches the 80 saved favourites in small, rate-limited batches. Exact name/alias plus matching country from both providers is required before a provider identity is confirmed. This does not create historical match results.</p><div class="row"><button id="discover-teams">Discover favourite teams</button><span id="team-discovery-progress" class="small">Not started</span></div><pre id="team-discovery-log" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">Ready when PostgreSQL and provider credentials are configured.</pre></section>
 <section class="card" style="margin-top:14px"><h2>Review SportAPI.ai team identities</h2>
@@ -1065,7 +1067,7 @@ document.getElementById('fetch-history').addEventListener('click',async()=>{
  finally{button.disabled=false}
 });
 async function refreshSavedTickets(){
- const out=document.getElementById('betmatrix-output'),token=document.getElementById('provider-token').value;
+ const out=document.getElementById('tickets-output'),token=document.getElementById('provider-token').value;
  out.textContent='Loading saved tickets and settlement states…';
  try{
   const response=await fetch('/api/tickets?limit=50',{headers:token?{'x-provider-diagnostics-token':token}:{}});
