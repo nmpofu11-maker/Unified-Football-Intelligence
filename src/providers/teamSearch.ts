@@ -164,12 +164,13 @@ function parseSportApiLeagueCatalogue(payload: unknown): Array<{id:string;name:s
 function parseSportApiLeagueTeams(payload: unknown, league: {id:string;name:string;country:string}): TeamSearchCandidate[] | null {
   const root = object(payload);
   if (!root) return null;
-  const teams = Array.isArray(root.teams) ? root.teams : Array.isArray(object(root.data)?.teams) ? object(root.data)!.teams : null;
+  const teams: unknown[] | null = Array.isArray(root.teams) ? root.teams : Array.isArray(object(root.data)?.teams) ? object(root.data)!.teams : null;
   if (!teams) return null;
-  return teams.flatMap((raw): TeamSearchCandidate[] => {
+  return teams.flatMap((raw: unknown): TeamSearchCandidate[] => {
     const team = object(raw);
     if (team?.id == null || !clean(team.name)) return [];
-    return [{ provider: "sportapi-ai", providerTeamId: String(team.id), name: clean(team.name)!, country: clean(team.country) ?? (league.country || undefined), league: league.name }];
+    const country = clean(team.country) ?? (league.country || undefined);
+    return [{ provider: "sportapi-ai", providerTeamId: String(team.id), name: clean(team.name)!, ...(country ? { country } : {}), league: league.name }];
   });
 }
 async function searchSportApiCatalogue(
