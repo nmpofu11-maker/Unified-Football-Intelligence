@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Pool } from "pg";
 import { forecastPoisson, type HistoricalMatch } from "../models/poisson.js";
 import { checkFixtureFreshness } from "./freshness.js";
+import { getCanonicalEvidenceSummary } from "../storage/postgresObservations.js";
 
 type State = "ready" | "not_configured" | "error";
 
@@ -183,6 +184,10 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
     return { state: "invalid_request" as const, reason: "valid_canonical_key_and_UTC_generatedAt_required" };
   }
   try {
+    const canonicalEvidence = await getCanonicalEvidenceSummary();
+    if (canonicalEvidence.state !== "ready") {
+      return { state: "unavailable" as const, reason: "CANONICAL_EVIDENCE_UNAVAILABLE" };
+    }
     await ensurePredictionSchema();
     const targetResult = await pool.query(
       `SELECT canonical_key, kickoff_utc, home_name, away_name, competition_name, status, evidence_state, updated_at
@@ -333,6 +338,10 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
 export async function predictionStorageStatus() {
   if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const };
   try {
+    const canonicalEvidence = await getCanonicalEvidenceSummary();
+    if (canonicalEvidence.state !== "ready") {
+      return { state: "error" as const, reason: "canonical_evidence_unavailable" };
+    }
     await ensurePredictionSchema();
     const schema = await pool.query(
       `SELECT
