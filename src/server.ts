@@ -454,7 +454,7 @@ app.get("/api/teams/provider-search", async (req: Request, res: Response) => {
     trackedTeamId: team.id,
     canonicalName: team.canonicalName,
     state: "discovery_only" as const,
-    providers: await searchTeamAcrossProviders(team.canonicalName, undefined, undefined, curatedTeamSearchAliases(team))
+    providers: await searchTeamAcrossProviders(team.canonicalName, undefined, undefined, curatedTeamSearchAliases(team), { country: team.country, league: team.league, teamCategory: team.teamCategory })
   })));
   const persistence = await persistTeamSearchObservations(results);
   if (persistence.state !== "saved") {
@@ -522,7 +522,7 @@ app.post("/api/teams/provider-search/next-batch", async (req: Request, res: Resp
     trackedTeamId: team.id,
     canonicalName: team.canonicalName,
     state: "discovery_only" as const,
-    providers: await searchTeamAcrossProviders(team.canonicalName, undefined, undefined, curatedTeamSearchAliases(team))
+    providers: await searchTeamAcrossProviders(team.canonicalName, undefined, undefined, curatedTeamSearchAliases(team), { country: team.country, league: team.league, teamCategory: team.teamCategory })
   })));
   const persistence = await persistTeamSearchObservations(results);
   if (persistence.state !== "saved") {
@@ -557,7 +557,7 @@ app.get("/api/teams/provider-search/results", async (req: Request, res: Response
     return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
   }
   const summary = await getStoredTeamSearchReview(teamSeed.teams);
-  const providerCoverage = (["api-football", "sportmonks"] as const).map(provider => {
+  const providerCoverage = (["api-football", "sportmonks", "sportapi-ai"] as const).map(provider => {
     const rows = summary.state === "ready"
       ? summary.teams.flatMap(team => team.providers.filter(item => item.provider === provider))
       : [];
