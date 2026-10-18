@@ -18,8 +18,8 @@ Monitor broadly, build deeper verified histories for the original 80 priority te
 - SportAPI.ai, Sportmonks and API-Football on-demand fixture adapters with separate diagnostics for empty success, partial data, rate limits, authentication errors, malformed payloads and network errors.
 - An API endpoint `/api/providers/fixtures?date=YYYY-MM-DD` that returns raw-normalized provider observations as **unverified candidates**.
 - A bounded historical backfill endpoint `/api/providers/history?from=YYYY-MM-DD&to=YYYY-MM-DD` for past UTC dates (maximum seven days per request). It reconciles provider observations and promotes only cross-provider-agreed finished scores to verified results; this endpoint still requires configured credentials and live verification.
-- A conservative cross-provider reconciliation preview; it does not create canonical fixtures or verify results.
-- PostgreSQL-backed append-only storage for valid provider observations marked `unverified`, with deduplication and provenance. The database must be configured and verified at runtime before this path can save records.
+- PostgreSQL-backed canonical evidence reconciliation. Fixtures with supplied provider team IDs are corroborated only when both IDs resolve to distinct confirmed tracked-team identities; supplied but unmapped IDs never fall back to names. Exact curated-name matching is reserved for feeds that genuinely omit team IDs.
+- PostgreSQL-backed append-only raw-observation storage plus a separate canonical fixture and verified-result ledger. Raw rows remain `unverified`; canonical rows carry an identity-gate flag. Legacy canonical rows default to untrusted and are excluded from forecasts, history inputs, evaluation and ticket settlement until safely rebuilt.
 - A transparent Poisson baseline that uses only verified, settled historical results strictly before the prediction cutoff and abstains when minimum history is missing.
 - A separate odds/value assessment that withholds betting recommendations for uncalibrated forecasts, stale/missing odds or mismatched fixtures.
 - Seeded verbatim list of the original 80 tracked-team names at `src/data/initial-tracked-teams.json`. Provider IDs and aliases are intentionally unresolved rather than guessed.
@@ -39,13 +39,13 @@ The prediction path reads directly from PostgreSQL; it does not accept user-supp
 
 The prediction route requires a corroborated, future scheduled fixture; exact reviewed mappings for both teams; and enough verified settled results from the **same competition** strictly before kickoff. The minimum per-team history threshold defaults to 5; `PREDICTION_MIN_TEAM_MATCHES` may only be set to an integer from 5 to 100. Invalid or weakened values fail closed and withhold probabilities rather than silently lowering the evidence requirement. It also requires the fixture evidence to be fresh: by default, the canonical evidence row must have been updated within the last 180 minutes at forecast time. Configure `FIXTURE_EVIDENCE_MAX_AGE_MINUTES` to a positive value up to 10,080 minutes (7 days) for your deployment; invalid policy values, stale evidence, or timestamps too far in the future cause the forecast to be withheld. It records a SHA-256 evidence hash and stores eligible forecasts in `prediction_ledger`. Missing evidence yields a withheld response rather than percentages.
 
-The Poisson baseline is explicitly marked uncalibrated. Forecast availability is not a betting recommendation; betting recommendations remain disabled until a genuinely out-of-sample calibration and evaluation pipeline passes separate gates. Team mappings are manual reviews, not automatic provider-ID discovery.
+The Poisson baseline is explicitly marked uncalibrated. Forecast availability is not a betting recommendation; betting recommendations remain disabled until a genuinely out-of-sample calibration and evaluation pipeline passes separate gates. Prediction-time canonical-name mappings are manually reviewed. Provider-ID reconciliation is a separate gate: only exact/curated name candidates with matching country across API-Football and Sportmonks can be cross-provider-confirmed; SportAPI catalogue candidates do not automatically approve an identity.
 
 ## Not yet production-ready
 
 - No database connection has yet been verified in the target environment. `DATABASE_URL` being present is not enough; `/api/storage/status` must report `state: "ready"`, and an ingestion/restart test must confirm durable rows.
-- No verified canonical fixtures or settled results are currently stored. Provider observations and reconciliation groups are not verified evidence.
-- The original 80 names still need reviewed provider-ID and competition mappings. A name list is not verified match history.
+- The current live database contents have not been verified in this workflow. Unknown counts must remain unknown; provider observations and reconciliation groups are not verified evidence.
+- Live mapping coverage for the original 80 names has not been independently confirmed. A watchlist or catalogue result is not a verified provider identity or historical match.
 - Historical result backfill is now supported through a bounded, authenticated provider endpoint, but a complete long-range backfill has not been run or verified. Chronological backtesting, calibration, odds ingestion, TheRundown integration and production deployment are not complete.
 - Betting recommendations remain disabled. The Poisson baseline is exploratory and not a calibrated betting model.
 
