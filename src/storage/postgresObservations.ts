@@ -443,7 +443,8 @@ export async function persistCanonicalEvidence(
     client = await configuredPool.connect();
     await ensureSchema(client);
     const reviewedTeamIds = await loadReviewedProviderTeamIdentityMap(client);
-    const previews = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
+    const nowMs = Date.now();
+    const previews = previewCandidateReconciliation(candidates, 5 * 60_000, nowMs, reviewedTeamIds);
     const corroborated = previews.filter(p => p.state === "corroborated" && p.providers.length >= 2);
     const conflicted = previews.filter(p => p.state === "conflicted");
     const eligibleResults = corroborated.filter(p =>
@@ -464,6 +465,7 @@ export async function persistCanonicalEvidence(
     // Otherwise preserve the existing snapshot while upserting only candidates that
     // pass the reviewed-ID gate; legacy rows remain hidden by identity_reviewed=false.
     if (options.replaceSnapshot && candidates.length > 0 && snapshotIdentityComplete) {
+      await client.query("DELETE FROM canonical_fixture_provider_refs");
       await client.query("DELETE FROM verified_settled_results");
       await client.query("DELETE FROM canonical_fixture_evidence");
     }
@@ -505,6 +507,39 @@ export async function persistCanonicalEvidence(
         [JSON.stringify(fixtureRows)]
       );
       savedFixtures = fixtureWrite.rowCount ?? 0;
+    }
+
+    // Keep the provider's native fixture ID linked to the canonical fixture only
+    // when that fixture was corroborated through the reviewed identity gate.
+    const providerRefRows = corroborated.flatMap(fixture =>
+      (fixture.providerFixtureRefs ?? []).map(ref => ({
+        provider: ref.provider,
+        provider_fixture_id: ref.providerFixtureId,
+        canonical_key: fixture.key,
+        observed_at: ref.observedAt
+      }))
+    );
+    if (providerRefRows.length > 0) {
+      await client.query(
+        `INSERT INTO canonical_fixture_provider_refs
+          (provider, provider_fixture_id, canonical_key, mapping_state, observed_at)
+         SELECT x.provider, x.provider_fixture_id, x.canonical_key, 'confirmed', x.observed_at
+         FROM jsonb_to_recordset($1::jsonb) AS x(
+           provider text, provider_fixture_id text, canonical_key text, observed_at timestamptz
+         )
+         ON CONFLICT (provider, provider_fixture_id) DO UPDATE SET
+           canonical_key = CASE
+             WHEN canonical_fixture_provider_refs.mapping_state = 'confirmed'
+              AND canonical_fixture_provider_refs.canonical_key = EXCLUDED.canonical_key
+             THEN EXCLUDED.canonical_key ELSE NULL END,
+           mapping_state = CASE
+             WHEN canonical_fixture_provider_refs.mapping_state = 'confirmed'
+              AND canonical_fixture_provider_refs.canonical_key = EXCLUDED.canonical_key
+             THEN 'confirmed' ELSE 'conflicted' END,
+           observed_at = GREATEST(canonical_fixture_provider_refs.observed_at, EXCLUDED.observed_at),
+           updated_at = NOW()`,
+        [JSON.stringify(providerRefRows)]
+      );
     }
 
     const resultRows = eligibleResults.map(fixture => ({
@@ -558,6 +593,66 @@ export async function persistCanonicalEvidence(
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => undefined);
     return { state: "error", corroboratedFixtures: 0, verifiedResults: 0, conflictedGroups: 0, errorCode: safeErrorCode(error) };
+  } finally {
+    client?.release();
+  }
+}
+
+export async function resolveCanonicalFixtureProviderRefs(
+  refs: Array<{ provider: "api-football" | "sportmonks" | "sportapi-ai"; providerFixtureId: string }>
+): Promise<{
+  state: "ready" | "not_configured" | "error" | "invalid_input";
+  mappings: Array<{ provider: string; providerFixtureId: string; state: "resolved" | "unresolved" | "conflicted"; canonicalKey?: string }>;
+  errorCode?: string;
+}> {
+  const configuredPool = getPool();
+  if (!configuredPool) return { state: "not_configured", mappings: [] };
+  if (!Array.isArray(refs) || refs.length > 200 || refs.some(ref =>
+    !ref || !["api-football", "sportmonks", "sportapi-ai"].includes(ref.provider) ||
+    !ref.providerFixtureId?.trim() || ref.providerFixtureId.length > 200
+  )) return { state: "invalid_input", mappings: [] };
+  const unique = [...new Map(refs.map(ref => [
+    `${ref.provider}:${ref.providerFixtureId.trim()}`,
+    { provider: ref.provider, providerFixtureId: ref.providerFixtureId.trim() }
+  ])).values()];
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    if (unique.length === 0) return { state: "ready", mappings: [] };
+    const result = await client.query<{
+      provider: string;
+      provider_fixture_id: string;
+      canonical_key: string | null;
+      mapping_state: string | null;
+      identity_reviewed: boolean | null;
+      evidence_state: string | null;
+    }>(
+      `SELECT x.provider, x.provider_fixture_id, r.canonical_key, r.mapping_state,
+              f.identity_reviewed, f.evidence_state
+       FROM jsonb_to_recordset($1::jsonb) AS x(provider text, provider_fixture_id text)
+       LEFT JOIN canonical_fixture_provider_refs r
+         ON r.provider = x.provider AND r.provider_fixture_id = x.provider_fixture_id
+       LEFT JOIN canonical_fixture_evidence f ON f.canonical_key = r.canonical_key`,
+      [JSON.stringify(unique)]
+    );
+    return {
+      state: "ready",
+      mappings: result.rows.map(row => {
+        const state = row.mapping_state === "conflicted" ? "conflicted"
+          : row.mapping_state === "confirmed" && row.canonical_key &&
+            row.identity_reviewed === true && row.evidence_state === "corroborated"
+            ? "resolved" : "unresolved";
+        return {
+          provider: row.provider,
+          providerFixtureId: row.provider_fixture_id,
+          state,
+          ...(state === "resolved" && row.canonical_key ? { canonicalKey: row.canonical_key } : {})
+        };
+      })
+    };
+  } catch (error) {
+    return { state: "error", mappings: [], errorCode: safeErrorCode(error) };
   } finally {
     client?.release();
   }
