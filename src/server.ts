@@ -3,7 +3,7 @@ import "dotenv/config";
 import express, { type Request, type Response } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { aggregateProviderStatus } from "./status/aggregate.js";
-import { createTicket, listTickets, reconcilePendingTickets } from "./tickets/store.js";
+import { createTicket, getTicketById, listTickets, reconcilePendingTickets } from "./tickets/store.js";
 import { parseBetMatrixTicket } from "./tickets/betmatrixImport.js";
 import { loadOutOfSampleEvaluation } from "./evaluation/store.js";
 import type { ProviderDiagnostics } from "./providers/provider.js";
@@ -950,19 +950,49 @@ app.post("/api/tickets/import-betmatrix", async (req: Request, res: Response) =>
       results.push({ sourceTicketId: ticket.sourceTicketId, state: "rejected", reason: unresolvedReason ?? "ticket_selection_unresolved" });
       continue;
     }
+    const resolvedSelections = selections.filter(
+      (selection): selection is NonNullable<typeof selection> => selection !== null
+    );
 
     const saved = await createTicket({
       ticketId: `betmatrix:${ticket.sourceTicketId}`,
       stakeAmount: ticket.stakeAmount,
       potentialPayout: ticket.potentialPayout,
-      selections: selections as NonNullable<(typeof selections)[number]>[]
+      selections: resolvedSelections
     });
     if (saved.state === "saved") {
       imported++;
       results.push({ sourceTicketId: ticket.sourceTicketId, ticketId: `betmatrix:${ticket.sourceTicketId}`, state: "imported" });
     } else if (saved.state === "conflict") {
-      alreadyImported++;
-      results.push({ sourceTicketId: ticket.sourceTicketId, ticketId: `betmatrix:${ticket.sourceTicketId}`, state: "already_imported" });
+      const existing = await getTicketById(`betmatrix:${ticket.sourceTicketId}`);
+      const existingSelections = existing.state === "ready" && existing.ticket && Array.isArray(existing.ticket.selections)
+        ? existing.ticket.selections as Array<Record<string, unknown>> : [];
+      const sameSelections = existingSelections.length === resolvedSelections.length && resolvedSelections.every((selection, index) => {
+        const prior = existingSelections[index];
+        if (!prior) return false;
+        return prior.selectionId === selection.selectionId &&
+          prior.fixtureId === selection.fixtureId &&
+          prior.market === selection.market &&
+          prior.pick === selection.pick &&
+          (prior.line === undefined ? undefined : Number(prior.line)) === selection.line;
+      });
+      if (existing.state === "ready" && existing.ticket &&
+          Number(existing.ticket.stake_amount) === ticket.stakeAmount &&
+          Number(existing.ticket.potential_payout) === ticket.potentialPayout &&
+          sameSelections) {
+        alreadyImported++;
+        results.push({ sourceTicketId: ticket.sourceTicketId, ticketId: `betmatrix:${ticket.sourceTicketId}`, state: "already_imported" });
+      } else {
+        rejected++;
+        results.push({
+          sourceTicketId: ticket.sourceTicketId,
+          ticketId: `betmatrix:${ticket.sourceTicketId}`,
+          state: "rejected",
+          reason: existing.state === "ready" && existing.ticket
+            ? "source_ticket_id_reused_with_different_ticket_contents"
+            : "existing_ticket_conflict_could_not_be_verified"
+        });
+      }
     } else {
       rejected++;
       results.push({ sourceTicketId: ticket.sourceTicketId, state: "rejected", reason: "ticket_store_unavailable_or_validation_failed" });
@@ -1019,6 +1049,14 @@ app.get("/", (_req: Request, res: Response) => res.type("html").send(`<!doctype 
 <div class="row"><label for="history-from">From (UTC)</label><input id="history-from" type="date"><label for="history-to">To (UTC)</label><input id="history-to" type="date"><button id="fetch-history">Backfill range</button></div>
 <pre id="history-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No historical backfill run yet.</pre>
 </section>
+<section class="card" style="margin-top:14px"><h2>Import pending BetMatrix tickets</h2>
+<p class="muted">Paste a pending-ticket export from BetMatrix as one ticket object, an array, or an object containing a <code>tickets</code> array. This is a controlled import, not an automatic connection to BetMatrix. Tickets are imported only when every provider fixture ID resolves to the same current corroborated canonical fixture. Source result status and odds are not trusted.</p>
+<textarea id="betmatrix-json" rows="8" style="width:100%;box-sizing:border-box;font-family:monospace" placeholder='Paste BetMatrix JSON here — no example ticket is preloaded.'></textarea>
+<div class="row"><button id="import-betmatrix-tickets">Validate and import pending tickets</button><button id="refresh-tickets">Refresh saved tickets</button><button id="reconcile-tickets">Reconcile pending tickets now</button></div>
+<pre id="betmatrix-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No BetMatrix import run yet.</pre>
+<h3>Saved tickets and settlement</h3>
+<pre id="tickets-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No saved tickets loaded yet.</pre>
+</section>
 <section class="card" style="margin-top:14px"><h2>Favourite-team identity discovery</h2><p class="muted">Searches the 80 saved favourites in small, rate-limited batches. Exact name/alias plus matching country from both providers is required before a provider identity is confirmed. This does not create historical match results.</p><div class="row"><button id="discover-teams">Discover favourite teams</button><span id="team-discovery-progress" class="small">Not started</span></div><pre id="team-discovery-log" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">Ready when PostgreSQL and provider credentials are configured.</pre></section>
 <section class="card" style="margin-top:14px"><h2>Review SportAPI.ai team identities</h2>
 <p class="muted">SportAPI.ai catalogue candidates are not auto-confirmed. Load the latest saved candidates, check the name, country and squad category, and explicitly approve one identity. This only enables fixture identity matching; it does not verify results or calibrate forecasts.</p>
@@ -1056,6 +1094,61 @@ document.getElementById('fetch-history').addEventListener('click',async()=>{
   out.textContent=JSON.stringify({state:data.state,range:data.range,candidateCount:data.candidateCount,candidateCountsByProvider:data.candidateCountsByProvider,candidateCountsByStatus:data.candidateCountsByStatus,corroboratedFixtures:data.corroboratedFixtures,verifiedSettledResults:data.verifiedSettledResults,conflictedGroups:data.conflictedGroups,ticketSettlement:data.ticketSettlement,persistence:data.persistence,canonicalEvidence:data.canonicalEvidence,reconciliation:data.reconciliation,reason:data.reason},null,2);
   if(r.ok)load();
  }catch(e){out.textContent='Historical backfill request failed. No data is assumed to have been saved.'}
+ finally{button.disabled=false}
+});
+async function refreshSavedTickets(){
+ const out=document.getElementById('tickets-output'),token=document.getElementById('provider-token').value;
+ out.textContent='Loading saved tickets and settlement states…';
+ try{
+  const response=await fetch('/api/tickets?limit=50',{headers:token?{'x-provider-diagnostics-token':token}:{}});
+  const data=await response.json();
+  out.textContent=JSON.stringify({
+   state:data.state,
+   count:(data.tickets||[]).length,
+   tickets:(data.tickets||[]).map(ticket=>({
+    ticket_id:ticket.ticket_id,status:ticket.status,stake_amount:ticket.stake_amount,
+    potential_payout:ticket.potential_payout,selections:ticket.selections,
+    settlement:ticket.settlement,updated_at:ticket.updated_at
+   })),
+   reason:data.reason,
+   note:'Ticket states use verified settled results only. A lost selection makes an accumulator lost immediately; unresolved or unverified selections remain pending.'
+  },null,2);
+ }catch(error){out.textContent='Could not load saved tickets. No settlement is assumed: '+String(error)}
+}
+document.getElementById('refresh-tickets').addEventListener('click',async()=>{
+ const button=document.getElementById('refresh-tickets');button.disabled=true;
+ try{await refreshSavedTickets()}finally{button.disabled=false}
+});
+document.getElementById('import-betmatrix-tickets').addEventListener('click',async()=>{
+ const button=document.getElementById('import-betmatrix-tickets'),out=document.getElementById('betmatrix-output');
+ const token=document.getElementById('provider-token').value,source=document.getElementById('betmatrix-json').value.trim();
+ if(!source){out.textContent='Paste the BetMatrix pending-ticket JSON first. Nothing was sent.';return}
+ let parsed;
+ try{parsed=JSON.parse(source)}catch{out.textContent='The pasted content is not valid JSON. Nothing was sent.';return}
+ const tickets=Array.isArray(parsed)?parsed:(parsed&&typeof parsed==='object'&&Array.isArray(parsed.tickets)?parsed.tickets:(parsed&&typeof parsed==='object'?[parsed]:null));
+ if(!tickets||tickets.length===0){out.textContent='JSON must contain at least one ticket object. Nothing was sent.';return}
+ if(tickets.length>50){out.textContent='Import is limited to 50 tickets per request. Split the export into smaller batches.';return}
+ button.disabled=true;out.textContent='Validating pending tickets against reviewed canonical fixture references…';
+ try{
+  const response=await fetch('/api/tickets/import-betmatrix',{method:'POST',headers:{'content-type':'application/json',...(token?{'x-provider-diagnostics-token':token}:{})},body:JSON.stringify({tickets})});
+  const data=await response.json();
+  out.textContent=JSON.stringify(data,null,2);
+  if(response.ok&&data.state==='completed'){
+   await refreshSavedTickets();
+  }
+ }catch(error){out.textContent='BetMatrix import request failed. Check the response before retrying to avoid duplicate submissions: '+String(error)}
+ finally{button.disabled=false}
+});
+document.getElementById('reconcile-tickets').addEventListener('click',async()=>{
+ const button=document.getElementById('reconcile-tickets'),out=document.getElementById('betmatrix-output');
+ const token=document.getElementById('provider-token').value;
+ button.disabled=true;out.textContent='Reconciling pending tickets against verified settled results only…';
+ try{
+  const response=await fetch('/api/tickets/reconcile',{method:'POST',headers:token?{'x-provider-diagnostics-token':token}:{}});
+  const data=await response.json();
+  out.textContent=JSON.stringify(data,null,2);
+  if(response.ok)await refreshSavedTickets();
+ }catch(error){out.textContent='Ticket reconciliation request failed; no result is assumed: '+String(error)}
  finally{button.disabled=false}
 });
 document.getElementById('discover-teams').addEventListener('click',async()=>{

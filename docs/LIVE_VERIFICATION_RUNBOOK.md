@@ -90,3 +90,14 @@ CI validates TypeScript, unit tests, build, and the database integration test ag
 6. Replay stored observations after reviewing identities. Replay makes no provider API calls. Verify the resulting canonical fixture coverage and blocker codes before testing a forecast.
 
 An operator-reviewed SportAPI ID enables provider fixture identity matching only. It does not verify fixtures or results, establish historical sample sufficiency, calibrate the model, enable betting recommendations, or settle a ticket by itself.
+
+
+## Importing pending BetMatrix tickets through the dashboard
+
+1. Confirm the canonical fixture-provider reference stage is ready. The importer intentionally rejects any leg whose provider fixture IDs do not resolve to one current corroborated canonical fixture.
+2. In the dashboard, enter the configured diagnostics token and paste the pending-ticket JSON export into **Import pending BetMatrix tickets**. The input accepts a single ticket object, a JSON array, or an object with a `tickets` array; a request is limited to 50 tickets.
+3. Review the import summary. Imported, already-imported, skipped non-pending, and rejected tickets are reported separately. Do not assume a rejected ticket was imported.
+4. Refresh **Saved tickets and settlement** to inspect current ticket state and per-selection evidence. Use **Reconcile pending tickets now** to run a settlement pass against verified results already stored in PostgreSQL.
+5. A verified losing leg makes an accumulator lost even if other legs remain pending. Unverified, conflicting, missing, or identity-unreviewed results do not count as wins/losses. Provider polling can trigger reconciliation when enabled, but remains disabled by default unless configured.
+
+This dashboard workflow is a manual JSON import, not a live authenticated connection to BetMatrix/Hollywoodbets. It does not import tickets automatically from the source application. Source ticket status, bookmaker odds and source model claims are not trusted as settlement evidence.
