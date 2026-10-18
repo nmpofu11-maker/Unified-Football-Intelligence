@@ -613,7 +613,7 @@ export async function resolveCanonicalFixtureProviderRefs(
   )) return { state: "invalid_input", mappings: [] };
   const unique = [...new Map(refs.map(ref => [
     `${ref.provider}:${ref.providerFixtureId.trim()}`,
-    { provider: ref.provider, providerFixtureId: ref.providerFixtureId.trim() }
+    { provider: ref.provider, provider_fixture_id: ref.providerFixtureId.trim() }
   ])).values()];
   let client: PoolClient | undefined;
   try {
