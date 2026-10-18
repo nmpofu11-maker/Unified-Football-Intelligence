@@ -1046,7 +1046,7 @@ export async function saveReviewedSportApiTeamIdentityMapping(
   if (!trackedTeamId || !providerTeamId || !reviewedBy) {
     return { state: "invalid_input", reason: "trackedTeamId_providerTeamId_and_reviewedBy_are_required" };
   }
-  if ([trackedTeamId, providerTeamId, reviewedBy].some(value => value.length > 200 || /[\\r\\n\\t]/.test(value))) {
+  if ([trackedTeamId, providerTeamId, reviewedBy].some(value => value.length > 200 || /[\r\n\t]/.test(value))) {
     return { state: "invalid_input", reason: "mapping_fields_too_long_or_contain_control_characters" };
   }
   const tracked = trackedTeams.find(team => team.id === trackedTeamId);
