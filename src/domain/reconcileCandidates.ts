@@ -116,7 +116,8 @@ export function previewCandidateReconciliation(
     const kickoff = Date.parse(candidate.kickoffUtc);
     if (!Number.isFinite(kickoff) || !candidate.home.name.trim() ||
         !candidate.away.name.trim() || !candidate.competition.name.trim()) continue;
-    const key = baseKey(candidate);
+    const key = baseKey(candidate, reviewedTeamIds);
+    if (!key) continue;
     const bucket = buckets.get(key) ?? [];
     bucket.push(candidate);
     buckets.set(key, bucket);
