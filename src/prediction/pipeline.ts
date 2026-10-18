@@ -4,6 +4,11 @@ import { forecastPoisson, type HistoricalMatch } from "../models/poisson.js";
 import { checkFixtureFreshness } from "./freshness.js";
 
 type State = "ready" | "not_configured" | "error";
+
+/** Exact reviewed names are compared case-insensitively with whitespace collapsed; no fuzzy matching. */
+function normalizeTeamMappingKey(value: string): string {
+  return value.trim().replace(/\\s+/g, " ").toLowerCase();
+}
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   max: 3,
@@ -28,6 +33,15 @@ export async function ensurePredictionSchema(): Promise<void> {
       reviewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CHECK (length(trim(team_id)) > 0),
       CHECK (length(trim(canonical_name)) > 0),
+      CHECK (length(trim(reviewed_by)) > 0)
+    );
+    CREATE TABLE IF NOT EXISTS prediction_team_aliases (
+      alias_key TEXT PRIMARY KEY,
+      alias TEXT NOT NULL,
+      team_id TEXT NOT NULL REFERENCES prediction_team_registry(team_id) ON DELETE CASCADE,
+      reviewed_by TEXT NOT NULL,
+      reviewed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CHECK (length(trim(alias)) > 0),
       CHECK (length(trim(reviewed_by)) > 0)
     );
     CREATE TABLE IF NOT EXISTS prediction_ledger (
@@ -94,6 +108,69 @@ export async function listReviewedTeamMappings() {
   }
 }
 
+export interface PredictionTeamAlias {
+  teamId: string;
+  alias: string;
+  reviewedBy: string;
+}
+
+export async function saveReviewedTeamAlias(input: PredictionTeamAlias) {
+  const teamId = input.teamId.trim();
+  const alias = input.alias.trim().replace(/\\s+/g, " ");
+  const reviewedBy = input.reviewedBy.trim();
+  const aliasKey = normalizeTeamMappingKey(alias);
+  if (!teamId || !alias || !reviewedBy) return { state: "invalid_input" as const, reason: "teamId_alias_and_reviewedBy_are_required" };
+  if (teamId.length > 160 || alias.length > 200 || reviewedBy.length > 160 || !aliasKey) {
+    return { state: "invalid_input" as const, reason: "alias_field_too_long_or_invalid" };
+  }
+  if (/[\\r\\n\\t]/.test(teamId + alias + reviewedBy)) {
+    return { state: "invalid_input" as const, reason: "alias_fields_must_not_contain_control_characters" };
+  }
+  try {
+    await ensurePredictionSchema();
+    const canonical = await pool.query("SELECT team_id, canonical_name FROM prediction_team_registry");
+    const canonicalCollision = canonical.rows.find((row: { team_id: string; canonical_name: string }) =>
+      normalizeTeamMappingKey(row.canonical_name) === aliasKey && row.team_id !== teamId);
+    if (canonicalCollision) return { state: "conflict" as const, reason: "alias_matches_another_teams_canonical_name" };
+    const existing = await pool.query("SELECT team_id, alias FROM prediction_team_aliases WHERE alias_key = $1", [aliasKey]);
+    if (existing.rowCount && existing.rows[0].team_id !== teamId) {
+      return { state: "conflict" as const, reason: "alias_already_assigned_to_another_team" };
+    }
+    const result = await pool.query(
+      `INSERT INTO prediction_team_aliases(alias_key, alias, team_id, reviewed_by)
+       SELECT $1, $2, $3, $4 WHERE EXISTS (SELECT 1 FROM prediction_team_registry WHERE team_id = $3)
+       ON CONFLICT(alias_key) DO UPDATE SET alias = EXCLUDED.alias, reviewed_by = EXCLUDED.reviewed_by, reviewed_at = NOW()
+       WHERE prediction_team_aliases.team_id = EXCLUDED.team_id
+       RETURNING alias_key, alias, team_id, reviewed_by, reviewed_at`,
+      [aliasKey, alias, teamId, reviewedBy]
+    );
+    if (!result.rowCount) {
+      const team = await pool.query("SELECT 1 FROM prediction_team_registry WHERE team_id = $1", [teamId]);
+      return team.rowCount
+        ? { state: "conflict" as const, reason: "alias_conflicts_with_existing_mapping" }
+        : { state: "invalid_input" as const, reason: "reviewed_team_mapping_not_found" };
+    }
+    return { state: "saved" as const, alias: result.rows[0] };
+  } catch {
+    return { state: "error" as const, reason: "prediction_alias_registry_unavailable" };
+  }
+}
+
+export async function listReviewedTeamAliases() {
+  if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const, aliases: [] };
+  try {
+    await ensurePredictionSchema();
+    const result = await pool.query(
+      `SELECT a.alias_key, a.alias, a.team_id, t.canonical_name, a.reviewed_by, a.reviewed_at
+       FROM prediction_team_aliases a JOIN prediction_team_registry t USING(team_id)
+       ORDER BY t.canonical_name, a.alias`
+    );
+    return { state: "ready" as const, aliases: result.rows };
+  } catch {
+    return { state: "error" as const, aliases: [], errorCode: "prediction_alias_registry_unavailable" };
+  }
+}
+
 /**
  * Loads the target fixture and all eligible, verified historical results from PostgreSQL.
  * It never accepts caller-supplied stats and never treats provider observations as results.
@@ -126,14 +203,36 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
       return { state: "withheld" as const, reason: "FIXTURE_KICKOFF_NOT_IN_FUTURE" };
     }
 
-    const mappingsResult = await pool.query(
-      "SELECT team_id, canonical_name FROM prediction_team_registry"
-    );
-    const mappingByName = new Map<string, string>(
-      mappingsResult.rows.map((row: { team_id: string; canonical_name: string }) => [row.canonical_name, row.team_id])
-    );
-    const homeTeamId = mappingByName.get(target.home_name);
-    const awayTeamId = mappingByName.get(target.away_name);
+    const [mappingsResult, aliasesResult] = await Promise.all([
+      pool.query("SELECT team_id, canonical_name FROM prediction_team_registry"),
+      pool.query("SELECT team_id, alias FROM prediction_team_aliases")
+    ]);
+    const mappingByName = new Map<string, string>();
+    const ambiguousMappingKeys = new Set<string>();
+    const addReviewedName = (name: string, teamId: string) => {
+      const key = normalizeTeamMappingKey(name);
+      if (!key || ambiguousMappingKeys.has(key)) return;
+      const prior = mappingByName.get(key);
+      if (prior && prior !== teamId) {
+        mappingByName.delete(key);
+        ambiguousMappingKeys.add(key);
+      } else {
+        mappingByName.set(key, teamId);
+      }
+    };
+    for (const row of mappingsResult.rows as Array<{ team_id: string; canonical_name: string }>) addReviewedName(row.canonical_name, row.team_id);
+    for (const row of aliasesResult.rows as Array<{ team_id: string; alias: string }>) addReviewedName(row.alias, row.team_id);
+    const homeKey = normalizeTeamMappingKey(target.home_name);
+    const awayKey = normalizeTeamMappingKey(target.away_name);
+    if (ambiguousMappingKeys.has(homeKey) || ambiguousMappingKeys.has(awayKey)) {
+      return {
+        state: "withheld" as const, reason: "TEAM_MAPPING_AMBIGUOUS",
+        ambiguousMappings: [ambiguousMappingKeys.has(homeKey) ? target.home_name : null,
+          ambiguousMappingKeys.has(awayKey) ? target.away_name : null].filter(Boolean)
+      };
+    }
+    const homeTeamId = mappingByName.get(homeKey);
+    const awayTeamId = mappingByName.get(awayKey);
     if (!homeTeamId || !awayTeamId) {
       return {
         state: "withheld" as const, reason: "TEAM_MAPPING_REQUIRED",
@@ -168,8 +267,8 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
       }));
       return {
         fixtureId: row.canonical_key,
-        homeTeamId: mappingByName.get(row.home_name) ?? `unmapped-home:${row.canonical_key}`,
-        awayTeamId: mappingByName.get(row.away_name) ?? `unmapped-away:${row.canonical_key}`,
+        homeTeamId: mappingByName.get(normalizeTeamMappingKey(row.home_name)) ?? `unmapped-home:${row.canonical_key}`,
+        awayTeamId: mappingByName.get(normalizeTeamMappingKey(row.away_name)) ?? `unmapped-away:${row.canonical_key}`,
         kickoffUtc: row.kickoff_utc instanceof Date ? row.kickoff_utc.toISOString() : new Date(row.kickoff_utc).toISOString(),
         result: {
           fixtureId: row.canonical_key, homeGoals: Number(row.home_goals), awayGoals: Number(row.away_goals),
