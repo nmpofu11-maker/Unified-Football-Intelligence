@@ -1012,12 +1012,16 @@ const automaticPollStatus: {
   candidateCount: number | null;
   corroboratedFixtures: number | null;
   verifiedResults: number | null;
+  observationPersistenceState: string | null;
+  canonicalPersistenceState: string | null;
+  ticketSettlementState: string | null;
   failedDateCount: number;
   lastErrorCode: string | null;
 } = {
   state: autoPollingEnabled ? "not_started" : "disabled",
   startedAt: null, completedAt: null, cyclesCompleted: 0, datesChecked: [],
   candidateCount: null, corroboratedFixtures: null, verifiedResults: null,
+  observationPersistenceState: null, canonicalPersistenceState: null, ticketSettlementState: null,
   failedDateCount: 0, lastErrorCode: null
 };
 let automaticPollInProgress = false;
@@ -1032,6 +1036,9 @@ async function runAutomaticProviderPoll(): Promise<void> {
   automaticPollStatus.candidateCount = 0;
   automaticPollStatus.corroboratedFixtures = 0;
   automaticPollStatus.verifiedResults = 0;
+  automaticPollStatus.observationPersistenceState = null;
+  automaticPollStatus.canonicalPersistenceState = null;
+  automaticPollStatus.ticketSettlementState = null;
   automaticPollStatus.failedDateCount = 0;
   automaticPollStatus.lastErrorCode = null;
   try {
@@ -1058,13 +1065,21 @@ async function runAutomaticProviderPoll(): Promise<void> {
         const candidates = batches.flat();
         automaticPollStatus.candidateCount = (automaticPollStatus.candidateCount ?? 0) + candidates.length;
         if (candidates.length > 0) {
-          await persistProviderObservations(candidates);
+          const persistence = await persistProviderObservations(candidates);
           const canonical = await persistCanonicalEvidence(candidates);
+          automaticPollStatus.observationPersistenceState = persistence.state;
+          automaticPollStatus.canonicalPersistenceState = canonical.state;
           automaticPollStatus.corroboratedFixtures = (automaticPollStatus.corroboratedFixtures ?? 0) + canonical.corroboratedFixtures;
           automaticPollStatus.verifiedResults = (automaticPollStatus.verifiedResults ?? 0) + canonical.verifiedResults;
+          if (persistence.state !== "ready" || canonical.state !== "ready") {
+            automaticPollStatus.failedDateCount += 1;
+            automaticPollStatus.lastErrorCode = "provider_poll_persistence_not_ready";
+          }
         }
         // Empty responses can still reconcile tickets against previously verified results.
-        await reconcilePendingTickets();
+        const settlement = await reconcilePendingTickets();
+        automaticPollStatus.ticketSettlementState = typeof settlement === "object" && settlement !== null && "state" in settlement
+          ? String((settlement as { state: unknown }).state) : "completed";
       } catch {
         automaticPollStatus.failedDateCount += 1;
         automaticPollStatus.lastErrorCode = "provider_poll_date_failed";
