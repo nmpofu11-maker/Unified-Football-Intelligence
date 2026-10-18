@@ -41,7 +41,7 @@ Do not repeatedly trigger provider requests to overcome a rate limit. Respect th
 1. Open `/api/teams/watchlist` and confirm the original 80 favourite-team names remain unchanged.
 2. Run **Discover favourite teams** from the dashboard or use the protected next-batch workflow, one run at a time.
 3. Inspect `/api/teams/provider-search/results` for saved candidate evidence and league/country/squad context.
-4. Candidate records are not confirmed identities. Preserve country, league, season and senior/reserve/youth/women distinctions. A name-only or fuzzy match is not sufficient.
+4. SportAPI catalogue candidates are discovery evidence only and do not auto-confirm a provider identity. For canonical fixture reconciliation, supplied API-Football/Sportmonks IDs must resolve to distinct confirmed tracked-team identities; the resolver requires one exact/curated-name candidate per provider with matching country context. An unresolved supplied ID never falls back to its display name. Preserve league, season and senior/reserve/youth/women distinctions.
 5. Keep ambiguous or unresolved teams unmapped until source IDs and competition context support a review decision. Do not force a match merely to raise mapping counts.
 
 SportAPI.ai catalogue candidates can improve discovery, but optional catalogue results do not independently confirm a canonical identity or prove historical match coverage.
