@@ -46,8 +46,13 @@ function poissonPmf(lambda: number, k: number): number {
  * strictly before kickoff are eligible. This model is not advertised as calibrated.
  */
 export function forecastPoisson(input: ForecastInput): ForecastOutput {
-  const minimum = input.minimumTeamMatches ?? 5;
-  const maxGoals = input.maxGoals ?? 10;
+  const requestedMinimum = input.minimumTeamMatches ?? 5;
+  const requestedMaxGoals = input.maxGoals ?? 10;
+  // Invalid configuration must fail closed rather than silently lowering evidence requirements.
+  const minimumPolicyValid = Number.isInteger(requestedMinimum) && requestedMinimum >= 5 && requestedMinimum <= 100;
+  const maxGoalsPolicyValid = Number.isInteger(requestedMaxGoals) && requestedMaxGoals >= 5 && requestedMaxGoals <= 20;
+  const minimum = minimumPolicyValid ? requestedMinimum : 5;
+  const maxGoals = maxGoalsPolicyValid ? requestedMaxGoals : 10;
   const kickoffCutoff = Date.parse(input.kickoffUtc);
   const generatedCutoff = Date.parse(input.generatedAt);
   const cutoff = Math.min(kickoffCutoff, generatedCutoff);
@@ -59,11 +64,17 @@ export function forecastPoisson(input: ForecastInput): ForecastOutput {
     isUtc(m.kickoffUtc) && Date.parse(m.kickoffUtc) < cutoff &&
     isUtc(m.result.settledAt) && Date.parse(m.result.settledAt) < cutoff &&
     m.result.provenance.length > 0 &&
-    m.result.provenance.every(p => p.evidenceState === "verified")
+    m.result.provenance.every(p =>
+      p.evidenceState === "verified" &&
+      isUtc(p.retrievedAt) &&
+      Date.parse(p.retrievedAt) < cutoff
+    )
   );
   const homeMatches = eligible.filter(m => m.homeTeamId === input.homeTeamId || m.awayTeamId === input.homeTeamId);
   const awayMatches = eligible.filter(m => m.homeTeamId === input.awayTeamId || m.awayTeamId === input.awayTeamId);
   const reasons: string[] = [];
+  if (!minimumPolicyValid) reasons.push("invalid_minimum_team_matches_policy");
+  if (!maxGoalsPolicyValid) reasons.push("invalid_max_goals_policy");
   if (!isUtc(input.kickoffUtc)) reasons.push("invalid_fixture_kickoff_timestamp");
   if (!isUtc(input.generatedAt)) reasons.push("invalid_forecast_timestamp");
   if (isUtc(input.kickoffUtc) && isUtc(input.generatedAt) && generatedCutoff > kickoffCutoff) reasons.push("forecast_generated_after_kickoff");
@@ -109,7 +120,7 @@ export function forecastPoisson(input: ForecastInput): ForecastOutput {
     forecast: {
       fixtureId: input.fixtureId, modelId: "poisson-baseline", modelVersion: "0.1.0",
       generatedAt: input.generatedAt, featureCutoffAt: input.generatedAt,
-      homeWin: reasons.length ? 0 : homeWin, draw: reasons.length ? 0 : draw, awayWin: reasons.length ? 0 : awayWin,
+      homeWin: reasons.length ? null : homeWin, draw: reasons.length ? null : draw, awayWin: reasons.length ? null : awayWin,
       evidenceState, abstentionReasons: reasons.length ? reasons : ["baseline_not_yet_calibrated_for_betting"]
     },
     diagnostics: { homeSamples: homeMatches.length, awaySamples: awayMatches.length, leagueSamples: eligible.length,

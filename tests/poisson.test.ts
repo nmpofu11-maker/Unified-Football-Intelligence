@@ -17,6 +17,9 @@ test("model abstains when verified history is insufficient", () => {
   const out = forecastPoisson({fixtureId:"upcoming",homeTeamId:"A",awayTeamId:"B",kickoffUtc:"2026-03-01T12:00:00.000Z",generatedAt:"2026-02-28T12:00:00.000Z",matches:history(3)});
   assert.equal(out.forecast.evidenceState,"insufficient_evidence");
   assert.ok(out.forecast.abstentionReasons.length > 0);
+  assert.equal(out.forecast.homeWin, null);
+  assert.equal(out.forecast.draw, null);
+  assert.equal(out.forecast.awayWin, null);
   assert.equal(out.diagnostics.expectedHomeGoals,null);
 });
 
@@ -25,7 +28,54 @@ test("model only uses pre-kickoff verified settled matches", () => {
   matches.push({...matches[0]!,fixtureId:"future",kickoffUtc:"2026-03-02T12:00:00.000Z",result:{...matches[0]!.result,fixtureId:"future",settledAt:"2026-03-03T12:00:00.000Z"}});
   const out = forecastPoisson({fixtureId:"upcoming",homeTeamId:"A",awayTeamId:"B",kickoffUtc:"2026-03-01T12:00:00.000Z",generatedAt:"2026-02-28T12:00:00.000Z",matches});
   assert.equal(out.diagnostics.leagueSamples,12);
-  assert.ok(out.forecast.homeWin >= 0 && out.forecast.draw >= 0 && out.forecast.awayWin >= 0);
-  assert.ok(Math.abs(out.forecast.homeWin + out.forecast.draw + out.forecast.awayWin - 1) < 0.001);
+  assert.equal(typeof out.forecast.homeWin, "number");
+  assert.equal(typeof out.forecast.draw, "number");
+  assert.equal(typeof out.forecast.awayWin, "number");
+  assert.ok(Math.abs(out.forecast.homeWin! + out.forecast.draw! + out.forecast.awayWin! - 1) < 0.001);
   assert.equal(out.forecast.evidenceState,"unverified");
+});
+
+
+test("model abstains when configured history threshold is invalid or weakened", () => {
+  const matches = history(12);
+  const base = {fixtureId:"upcoming",homeTeamId:"A",awayTeamId:"B",kickoffUtc:"2026-03-01T12:00:00.000Z",generatedAt:"2026-02-28T12:00:00.000Z",matches};
+  for (const minimumTeamMatches of [0, 1, 4, -1, 1.5, Number.NaN]) {
+    const out = forecastPoisson({...base, minimumTeamMatches});
+    assert.equal(out.forecast.evidenceState, "insufficient_evidence");
+    assert.ok(out.forecast.abstentionReasons.includes("invalid_minimum_team_matches_policy"));
+    assert.equal(out.forecast.homeWin, null);
+    assert.equal(out.forecast.draw, null);
+    assert.equal(out.forecast.awayWin, null);
+  }
+});
+
+test("model abstains when goal-grid configuration is invalid", () => {
+  const out = forecastPoisson({fixtureId:"upcoming",homeTeamId:"A",awayTeamId:"B",kickoffUtc:"2026-03-01T12:00:00.000Z",generatedAt:"2026-02-28T12:00:00.000Z",matches:history(12),maxGoals:0});
+  assert.equal(out.forecast.evidenceState, "insufficient_evidence");
+  assert.ok(out.forecast.abstentionReasons.includes("invalid_max_goals_policy"));
+  assert.equal(out.forecast.homeWin, null);
+  assert.equal(out.forecast.draw, null);
+  assert.equal(out.forecast.awayWin, null);
+});
+
+
+test("model excludes otherwise verified results whose source evidence arrived after forecast cutoff", () => {
+  const matches = history(12);
+  matches[0] = {
+    ...matches[0]!,
+    result: {
+      ...matches[0]!.result,
+      provenance: [{provider:"late-source", retrievedAt:"2026-03-01T13:00:00.000Z", evidenceState:"verified" as const}]
+    }
+  };
+  const out = forecastPoisson({
+    fixtureId:"upcoming", homeTeamId:"A", awayTeamId:"B",
+    kickoffUtc:"2026-03-01T12:00:00.000Z", generatedAt:"2026-02-28T12:00:00.000Z",
+    matches, minimumTeamMatches: 6
+  });
+  assert.equal(out.diagnostics.leagueSamples, 11);
+  assert.equal(out.forecast.evidenceState, "insufficient_evidence");
+  assert.equal(out.forecast.homeWin, null);
+  assert.equal(out.forecast.draw, null);
+  assert.equal(out.forecast.awayWin, null);
 });
