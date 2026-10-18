@@ -17,6 +17,7 @@ Monitor broadly, build deeper verified histories for the original 80 priority te
 - Conservative team/competition identity resolution: provider IDs must agree with names; unknown or ambiguous names are blocked rather than fuzzy-matched.
 - SportAPI.ai, Sportmonks and API-Football on-demand fixture adapters with separate diagnostics for empty success, partial data, rate limits, authentication errors, malformed payloads and network errors.
 - An API endpoint `/api/providers/fixtures?date=YYYY-MM-DD` that returns raw-normalized provider observations as **unverified candidates**.
+- A bounded historical backfill endpoint `/api/providers/history?from=YYYY-MM-DD&to=YYYY-MM-DD` for past UTC dates (maximum seven days per request). It reconciles provider observations and promotes only cross-provider-agreed finished scores to verified results; this endpoint still requires configured credentials and live verification.
 - A conservative cross-provider reconciliation preview; it does not create canonical fixtures or verify results.
 - PostgreSQL-backed append-only storage for valid provider observations marked `unverified`, with deduplication and provenance. The database must be configured and verified at runtime before this path can save records.
 - A transparent Poisson baseline that uses only verified, settled historical results strictly before the prediction cutoff and abstains when minimum history is missing.
@@ -43,7 +44,7 @@ The Poisson baseline is explicitly marked uncalibrated. Forecast availability is
 - No database connection has yet been verified in the target environment. `DATABASE_URL` being present is not enough; `/api/storage/status` must report `state: "ready"`, and an ingestion/restart test must confirm durable rows.
 - No verified canonical fixtures or settled results are currently stored. Provider observations and reconciliation groups are not verified evidence.
 - The original 80 names still need reviewed provider-ID and competition mappings. A name list is not verified match history.
-- Historical result backfill, immutable prediction ledger, chronological backtesting, calibration, odds ingestion, TheRundown integration, authentication and production deployment are not complete.
+- Historical result backfill is now supported through a bounded, authenticated provider endpoint, but a complete long-range backfill has not been run or verified. Chronological backtesting, calibration, odds ingestion, TheRundown integration and production deployment are not complete.
 - Betting recommendations remain disabled. The Poisson baseline is exploratory and not a calibrated betting model.
 
 ## Favourite-team identity discovery
