@@ -8,6 +8,7 @@ import {
   getObservationStoreSummary,
   getReviewedProviderTeamIdentityMap,
   persistCanonicalEvidence,
+  resolveCanonicalFixtureProviderRefs,
   persistProviderObservations,
   persistTeamSearchObservations,
   saveReviewedSportApiTeamIdentityMapping,
@@ -319,6 +320,19 @@ test("unmapped SportAPI fixture IDs do not block a safe snapshot rebuild from ma
       fixture.home === homeName && fixture.away === awayName &&
       fixture.competition === competitionName && fixture.evidenceState === "corroborated"
     ));
+    const refs = await resolveCanonicalFixtureProviderRefs([
+      { provider: "api-football", providerFixtureId: `api-football-${suffix}` },
+      { provider: "sportmonks", providerFixtureId: `sportmonks-${suffix}` },
+      { provider: "sportapi-ai", providerFixtureId: `sportapi-ai-${suffix}` }
+    ]);
+    assert.equal(refs.state, "ready");
+    const apiRef = refs.mappings.find(item => item.provider === "api-football");
+    const monksRef = refs.mappings.find(item => item.provider === "sportmonks");
+    const sportApiRef = refs.mappings.find(item => item.provider === "sportapi-ai");
+    assert.equal(apiRef?.state, "resolved");
+    assert.equal(monksRef?.state, "resolved");
+    assert.equal(apiRef?.canonicalKey, monksRef?.canonicalKey);
+    assert.equal(sportApiRef?.state, "unresolved");
   } finally {
     const rows = await cleanupPool.query<{ canonical_key: string }>(
       `SELECT canonical_key FROM canonical_fixture_evidence
