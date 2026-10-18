@@ -259,7 +259,7 @@ export function reviewTeamSearchCandidates(
   return assessments;
 }
 
-export type ProviderIdentityState = "cross_provider_confirmed" | "provider_candidate" | "needs_review" | "ambiguous" | "unresolved";
+export type ProviderIdentityState = "cross_provider_confirmed" | "operator_reviewed" | "provider_candidate" | "needs_review" | "ambiguous" | "unresolved";
 
 /**
  * Separates a provider-scoped, context-compatible candidate from a confirmed
