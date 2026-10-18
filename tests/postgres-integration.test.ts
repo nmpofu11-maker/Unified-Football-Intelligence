@@ -320,6 +320,15 @@ test("unmapped SportAPI fixture IDs do not block a safe snapshot rebuild from ma
       fixture.home === homeName && fixture.away === awayName &&
       fixture.competition === competitionName && fixture.evidenceState === "corroborated"
     ));
+    const rawRefs = await cleanupPool.query(
+      `SELECT r.provider, r.provider_fixture_id, r.canonical_key, r.mapping_state,
+              f.identity_reviewed, f.evidence_state
+       FROM canonical_fixture_provider_refs r
+       LEFT JOIN canonical_fixture_evidence f ON f.canonical_key = r.canonical_key
+       WHERE r.provider_fixture_id = ANY($1::text[])`,
+      [[`api-football-${suffix}`, `sportmonks-${suffix}`]]
+    );
+    assert.equal(rawRefs.rowCount, 2, JSON.stringify(rawRefs.rows));
     const refs = await resolveCanonicalFixtureProviderRefs([
       { provider: "api-football", providerFixtureId: `api-football-${suffix}` },
       { provider: "sportmonks", providerFixtureId: `sportmonks-${suffix}` },
@@ -329,7 +338,7 @@ test("unmapped SportAPI fixture IDs do not block a safe snapshot rebuild from ma
     const apiRef = refs.mappings.find(item => item.provider === "api-football");
     const monksRef = refs.mappings.find(item => item.provider === "sportmonks");
     const sportApiRef = refs.mappings.find(item => item.provider === "sportapi-ai");
-    assert.equal(apiRef?.state, "resolved");
+    assert.equal(apiRef?.state, "resolved", JSON.stringify({ apiRef, rawRefs: rawRefs.rows, refs }));
     assert.equal(monksRef?.state, "resolved");
     assert.equal(apiRef?.canonicalKey, monksRef?.canonicalKey);
     assert.equal(sportApiRef?.state, "unresolved");
