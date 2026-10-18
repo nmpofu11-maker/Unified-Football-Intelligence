@@ -13,7 +13,7 @@ import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { hasCompleteReviewedProviderTeamIdentityCoverage, previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
 import { curatedTeamSearchAliases, discoverTrackedTeamIdentities, reviewTeamSearchCandidates } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getReviewedProviderTeamIdentityMap, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getReviewedProviderTeamIdentityMap, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, saveReviewedSportApiTeamIdentityMapping, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 import { listReviewedTeamAliases, listReviewedTeamMappings, listSavedPredictions, predictStoredFixture, predictionStorageStatus, saveReviewedTeamAlias, saveReviewedTeamMapping } from "./prediction/pipeline.js";
 
 const app = express();
@@ -37,6 +37,11 @@ function safeTokenEquals(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[character] ?? character);
 }
 function ticketAccessAllowed(req: Request, res: Response): boolean {
   const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
@@ -607,6 +612,33 @@ app.get("/api/teams/provider-search/results", async (req: Request, res: Response
   });
 });
 
+
+app.post("/api/teams/provider-search/review-sportapi", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+  const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
+  const reviewed = await saveReviewedSportApiTeamIdentityMapping({
+    trackedTeamId: typeof body.trackedTeamId === "string" ? body.trackedTeamId : "",
+    providerTeamId: typeof body.providerTeamId === "string" ? body.providerTeamId : "",
+    reviewedBy: typeof body.reviewedBy === "string" ? body.reviewedBy : ""
+  }, teamSeed.teams);
+  const statusCode = reviewed.state === "saved" ? 200
+    : reviewed.state === "invalid_input" ? 400
+    : reviewed.state === "candidate_not_found" ? 404
+    : reviewed.state === "unsafe_candidate" ? 422
+    : reviewed.state === "conflict" ? 409
+    : 503;
+  return res.status(statusCode).json({
+    ...reviewed,
+    note: "An operator-reviewed SportAPI.ai provider ID may be used for canonical fixture identity matching only. This action does not verify any fixture, result, historical sample, forecast or ticket."
+  });
+});
 
 app.post("/api/teams/provider-search/reconcile", async (req: Request, res: Response) => {
   const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
