@@ -3,6 +3,7 @@ import "dotenv/config";
 import express, { type Request, type Response } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { aggregateProviderStatus } from "./status/aggregate.js";
+import { createTicket, listTickets, reconcilePendingTickets } from "./tickets/store.js";
 import type { ProviderDiagnostics } from "./providers/provider.js";
 import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
 import { SportmonksProvider } from "./providers/adapters/sportmonks.js";
@@ -34,6 +35,19 @@ function safeTokenEquals(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
   const b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+function ticketAccessAllowed(req: Request, res: Response): boolean {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+    return false;
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+    return false;
+  }
+  return true;
 }
 function providerStatus() {
   return providerConfig.map(p => {
@@ -124,6 +138,9 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
   const candidates = [...sportApiAi, ...sportmonks, ...apiFootball];
   const persistence = await persistProviderObservations(candidates);
   const canonicalEvidence = await persistCanonicalEvidence(candidates);
+  // Re-evaluate pending tickets after each fresh provider result-ingestion cycle.
+  // Settlement uses only the canonical verified-result table, never raw observations.
+  const ticketSettlement = await reconcilePendingTickets();
   const reconciliationPreview = previewCandidateReconciliation(candidates);
   const byStatus: Record<string, number> = {};
   for (const candidate of candidates) byStatus[candidate.status] = (byStatus[candidate.status] ?? 0) + 1;
@@ -131,6 +148,7 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     state: "provider_ingestion_completed", date,
     canonicalFixturesCorroborated: canonicalEvidence.corroboratedFixtures,
     verifiedResultsCreatedOrConfirmed: canonicalEvidence.verifiedResults,
+    ticketSettlement,
     conflictedGroups: canonicalEvidence.conflictedGroups,
     note: "Raw observations remain unverified. Canonical fixture evidence is stored separately and only cross-provider corroborated finished scores can enter the verified-result ledger. Single-source or conflicted evidence is never promoted.",
     persistence,
@@ -579,6 +597,33 @@ app.get("/api/history/status", async (_req: Request, res: Response) => {
       ...(searchReview.state === "ready" ? [] : [searchReview.errorCode ?? "team_search_store_not_ready"])
     ]
   });
+});
+
+app.post("/api/tickets", async (req: Request, res: Response) => {
+  if (!ticketAccessAllowed(req, res)) return;
+  const body = req.body ?? {};
+  const result = await createTicket({
+    ticketId: typeof body.ticketId === "string" ? body.ticketId : "",
+    stakeAmount: typeof body.stakeAmount === "number" ? body.stakeAmount : Number.NaN,
+    potentialPayout: typeof body.potentialPayout === "number" ? body.potentialPayout : Number.NaN,
+    selections: Array.isArray(body.selections) ? body.selections : []
+  });
+  const code = result.state === "saved" ? 201 : result.state === "conflict" ? 409 :
+    result.state === "invalid_input" ? 400 : 503;
+  return res.status(code).json(result);
+});
+
+app.get("/api/tickets", async (req: Request, res: Response) => {
+  if (!ticketAccessAllowed(req, res)) return;
+  const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : 50;
+  const result = await listTickets(limit);
+  return res.status(result.state === "error" || result.state === "not_configured" ? 503 : 200).json(result);
+});
+
+app.post("/api/tickets/reconcile", async (req: Request, res: Response) => {
+  if (!ticketAccessAllowed(req, res)) return;
+  const result = await reconcilePendingTickets();
+  return res.status(result.state === "ready" ? 200 : 503).json(result);
 });
 
 app.get("/", (_req: Request, res: Response) => res.type("html").send(`<!doctype html>
