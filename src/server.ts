@@ -699,7 +699,7 @@ app.get("/api/predictions/ledger", async (req: Request, res: Response) => {
   const result = await listSavedPredictions(rawLimit);
   return res.status(result.state === "error" ? 503 : 200).json({
     ...result,
-    note: "Ledger entries are immutable records of exploratory forecasts and their evidence hashes. They are not calibrated betting recommendations."
+    note: "Ledger entries are immutable exploratory forecasts. current_identity_status distinguishes identity-gated records from legacy unreviewed or missing fixture identities; identity-gate eligibility is not model calibration or betting approval."
   });
 });
 
