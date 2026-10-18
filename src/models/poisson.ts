@@ -64,7 +64,11 @@ export function forecastPoisson(input: ForecastInput): ForecastOutput {
     isUtc(m.kickoffUtc) && Date.parse(m.kickoffUtc) < cutoff &&
     isUtc(m.result.settledAt) && Date.parse(m.result.settledAt) < cutoff &&
     m.result.provenance.length > 0 &&
-    m.result.provenance.every(p => p.evidenceState === "verified")
+    m.result.provenance.every(p =>
+      p.evidenceState === "verified" &&
+      isUtc(p.retrievedAt) &&
+      Date.parse(p.retrievedAt) < cutoff
+    )
   );
   const homeMatches = eligible.filter(m => m.homeTeamId === input.homeTeamId || m.awayTeamId === input.homeTeamId);
   const awayMatches = eligible.filter(m => m.homeTeamId === input.awayTeamId || m.awayTeamId === input.awayTeamId);
