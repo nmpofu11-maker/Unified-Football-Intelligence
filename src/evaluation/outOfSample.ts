@@ -77,8 +77,8 @@ export function evaluateOutOfSample(candidates: EvaluationCandidate[], minimumSa
   let brierTotal = 0, logLossTotal = 0, correct = 0;
   const epsilon = 1e-15;
   for (const row of rows) {
-    const actual = row.homeGoals > row.awayGoals ? 0 : row.homeGoals < row.awayGoals ? 2 : 1;
-    const p = [row.probabilities.homeWin as number, row.probabilities.draw as number, row.probabilities.awayWin as number];
+    const actual: 0 | 1 | 2 = row.homeGoals > row.awayGoals ? 0 : row.homeGoals < row.awayGoals ? 2 : 1;
+    const p: [number, number, number] = [row.probabilities.homeWin as number, row.probabilities.draw as number, row.probabilities.awayWin as number];
     brierTotal += p.reduce((sum, value, index) => sum + (value - (index === actual ? 1 : 0)) ** 2, 0);
     logLossTotal += -Math.log(Math.max(epsilon, p[actual]));
     if (p.indexOf(Math.max(...p)) === actual) correct++;
