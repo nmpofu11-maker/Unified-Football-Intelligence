@@ -93,8 +93,8 @@ test("PostgreSQL ticket reconciliation marks an accumulator lost immediately whe
 
     await cleanupPool.query(
       `INSERT INTO canonical_fixture_evidence
-        (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state)
-       VALUES ($1,$2,$3,$4,$5,'finished',$6,'corroborated')`,
+        (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state, identity_reviewed)
+       VALUES ($1,$2,$3,$4,$5,'finished',$6,'corroborated',TRUE)`,
       [fixtureId, kickoffUtc, "Integration Home FC", "Integration Away FC", "Integration Test League", ["sportapi-ai", "sportmonks"]]
     );
     await cleanupPool.query(
