@@ -168,23 +168,36 @@ function normalizedCountry(value: string): string {
     .replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
 }
 
-function observedSquadCategory(name: string): "women" | "youth" | "women_youth" | "reserve" | "senior" {
+function observedSquadCategory(
+  name: string,
+  gender?: string,
+  teamType?: string
+): "women" | "youth" | "women_youth" | "reserve" | "senior" {
   const value = normalise(name);
-  const isWomen = /(^| )(women|woman|ladies|female|w)$/.test(value);
+  const metadata = normalise(`${gender ?? ""} ${teamType ?? ""}`);
+  const isWomen = /(^| )(women|woman|ladies|female|w)$/.test(value) ||
+    /(^| )(women|woman|ladies|female|w)( |$)/.test(metadata);
   // Youth markers may occur before a gender marker, e.g. "France U16 W".
-  // Preserve both qualifiers so a women's youth side cannot be mistaken for
-  // the men's/international youth team (or the senior women's side).
-  const isYouth = /(^| )(u[0-9]{1,2}|youth|academy|junior|juniors)( |$)/.test(value);
+  // Provider metadata is considered as well as the display name so a plain
+  // name with a female/youth team classification is not treated as senior.
+  const isYouth = /(^| )(u[0-9]{1,2}|youth|academy|junior|juniors)( |$)/.test(value) ||
+    /(^| )(u[0-9]{1,2}|youth|academy|junior|juniors)( |$)/.test(metadata);
   if (isWomen && isYouth) return "women_youth";
   if (isWomen) return "women";
   if (isYouth) return "youth";
-  if (/(^| )(ii|iii|iv|b|res|reserve|reserves|amateure|amateures|amateurs)$/.test(value)) return "reserve";
+  if (/(^| )(ii|iii|iv|b|res|reserve|reserves|amateure|amateures|amateurs)$/.test(value) ||
+      /(^| )(ii|iii|iv|b|res|reserve|reserves|second team)( |$)/.test(metadata)) return "reserve";
   return "senior";
 }
 
-function matchesTrackedSquadCategory(trackedCategory: string | undefined, candidateName: string): boolean {
+function matchesTrackedSquadCategory(
+  trackedCategory: string | undefined,
+  candidateName: string,
+  gender?: string,
+  teamType?: string
+): boolean {
   if (!trackedCategory) return true;
-  const observed = observedSquadCategory(candidateName);
+  const observed = observedSquadCategory(candidateName, gender, teamType);
   if (trackedCategory === "senior") return observed === "senior";
   if (trackedCategory === "women" || trackedCategory === "international_women") return observed === "women";
   if (trackedCategory === "youth" || trackedCategory === "international_youth") return observed === "youth";
@@ -201,7 +214,7 @@ export function reviewTeamSearchCandidates(
   tracked: TrackedTeamIdentity,
   providerResults: Array<{
     provider: "api-football" | "sportmonks" | "sportapi-ai";
-    candidates: Array<{ providerTeamId: string; name: string; country?: string }>;
+    candidates: Array<{ providerTeamId: string; name: string; country?: string; gender?: string; teamType?: string; league?: string }>;
   }>
 ): TeamSearchCandidateAssessment[] {
   const acceptedNames = namesFor(tracked);
@@ -214,7 +227,7 @@ export function reviewTeamSearchCandidates(
       const countryMatch: TeamSearchCandidateAssessment["countryMatch"] =
         !tracked.country?.trim() || !candidate.country?.trim() ? "unknown" :
           normalizedCountry(tracked.country) === normalizedCountry(candidate.country) ? "match" : "conflict";
-      const observedCategory = observedSquadCategory(candidate.name);
+      const observedCategory = observedSquadCategory(candidate.name, candidate.gender, candidate.teamType);
       let categoryMatch: TeamSearchCandidateAssessment["categoryMatch"] = "unknown";
       if (expectedCategory === "senior") categoryMatch = observedCategory === "senior" ? "match" : "mismatch";
       else if (expectedCategory === "women" || expectedCategory === "international_women") {
@@ -228,6 +241,8 @@ export function reviewTeamSearchCandidates(
       if (categoryMatch === "mismatch") reasons.push("candidate_squad_category_conflicts_with_watchlist");
       if (countryMatch === "unknown") reasons.push("country_context_missing_or_unavailable");
       if (categoryMatch === "unknown") reasons.push("squad_category_not_automatically_classified");
+      const countrySufficient = !tracked.country?.trim() || countryMatch === "match";
+      const categorySufficient = !expectedCategory || categoryMatch === "match";
       assessments.push({
         provider: result.provider,
         providerTeamId: candidate.providerTeamId,
@@ -235,7 +250,7 @@ export function reviewTeamSearchCandidates(
         nameMatch: !matchedName ? "unrelated_search_result" : matchedName,
         countryMatch,
         categoryMatch,
-        reviewState: matchedName && countryMatch !== "conflict" && categoryMatch !== "mismatch"
+        reviewState: matchedName && countrySufficient && categorySufficient
           ? "candidate_matches_watchlist_context" : "needs_review",
         reasons
       });
@@ -297,11 +312,20 @@ export function reconcileTeamSearchIdentity(
       if (!matchingNames.has(normalise(candidate.name))) return false;
       // Never confirm a provider identity whose squad qualifiers conflict with
       // the user's watchlist category, even when that spelling is a curated alias.
-      if (!matchesTrackedSquadCategory(tracked.teamCategory, candidate.name)) return false;
-      // The favourite watchlist's country is authoritative context. If a provider
-      // supplies conflicting country metadata, never accept that candidate as this team.
-      if (tracked.country?.trim() && candidate.country?.trim() &&
-          normalizeCountry(candidate.country) !== normalizeCountry(tracked.country)) return false;
+      if (!matchesTrackedSquadCategory(tracked.teamCategory, candidate.name, candidate.gender, candidate.teamType)) return false;
+      // The favourite watchlist's country is authoritative. When the watchlist
+      // specifies a country, missing as well as conflicting provider country
+      // metadata blocks automatic confirmation.
+      if (tracked.country?.trim()) {
+        if (!candidate.country?.trim()) {
+          reasons.add("provider_country_missing");
+          return false;
+        }
+        if (normalizeCountry(candidate.country) !== normalizeCountry(tracked.country)) {
+          reasons.add("provider_country_conflict");
+          return false;
+        }
+      }
       return true;
     });
     return { provider, result, candidates };
