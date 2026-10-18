@@ -401,6 +401,7 @@ export async function persistCanonicalEvidence(
            status = EXCLUDED.status,
            providers = ARRAY(SELECT DISTINCT unnest(canonical_fixture_evidence.providers || EXCLUDED.providers)),
            evidence_state = CASE WHEN canonical_fixture_evidence.evidence_state = 'conflicted' OR EXCLUDED.evidence_state = 'conflicted' THEN 'conflicted' ELSE 'corroborated' END,
+           identity_reviewed = EXCLUDED.identity_reviewed,
            updated_at = NOW()
          RETURNING canonical_key`,
         [JSON.stringify(fixtureRows)]
