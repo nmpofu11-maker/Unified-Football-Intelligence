@@ -43,11 +43,22 @@ function isSelection(value: unknown): value is TicketSelection {
   const s = value as Partial<TicketSelection>;
   const markets = ["1x2", "btts", "total_goals", "double_chance", "draw_no_bet"];
   const picks = ["home", "draw", "away", "yes", "no", "over", "under", "home_draw", "home_away", "draw_away"];
+  const source = s.sourceMetadata;
+  const sourceMetadataValid = source === undefined || (
+    typeof source === "object" && source !== null &&
+    source.sourceApp === "BetMatrix" &&
+    typeof source.sourceTicketId === "string" && source.sourceTicketId.length <= 200 &&
+    typeof source.sourceMarket === "string" && source.sourceMarket.length <= 160 &&
+    typeof source.sourceHomeTeam === "string" && source.sourceHomeTeam.length <= 200 &&
+    typeof source.sourceAwayTeam === "string" && source.sourceAwayTeam.length <= 200 &&
+    (source.sourceOdds === undefined || (typeof source.sourceOdds === "number" && Number.isFinite(source.sourceOdds) && source.sourceOdds > 0))
+  );
   return typeof s.selectionId === "string" && Boolean(s.selectionId.trim()) && s.selectionId.length <= 160 &&
     typeof s.fixtureId === "string" && Boolean(s.fixtureId.trim()) && s.fixtureId.length <= 500 &&
     typeof s.market === "string" && markets.includes(s.market) &&
     typeof s.pick === "string" && picks.includes(s.pick) &&
-    (s.market !== "total_goals" || (typeof s.line === "number" && Number.isFinite(s.line) && s.line >= 0));
+    (s.market !== "total_goals" || (typeof s.line === "number" && Number.isFinite(s.line) && s.line >= 0)) &&
+    sourceMetadataValid;
 }
 
 export interface CreateTicketInput {
