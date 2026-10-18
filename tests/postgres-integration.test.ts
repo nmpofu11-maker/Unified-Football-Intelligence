@@ -479,10 +479,12 @@ test("SportAPI identity approval requires saved safe candidate context, prevents
   const suffix = randomUUID();
   const trackedTeamId = `review-team-${suffix}`;
   const secondTeamId = `review-team-second-${suffix}`;
+  const legacyTeamId = `review-team-legacy-${suffix}`;
   const providerTeamId = `sportapi-team-${suffix}`;
   const trackedTeams = [
     { id: trackedTeamId, canonicalName: `Review Club ${suffix}`, country: "Angola", teamCategory: "senior" },
-    { id: secondTeamId, canonicalName: `Review Rival ${suffix}`, country: "Angola", teamCategory: "senior" }
+    { id: secondTeamId, canonicalName: `Review Rival ${suffix}`, country: "Angola", teamCategory: "senior" },
+    { id: legacyTeamId, canonicalName: `Legacy Single Provider ${suffix}`, country: "Angola", teamCategory: "senior" }
   ];
   const cleanupPool = new Pool({ connectionString, max: 1 });
   try {
@@ -517,11 +519,20 @@ test("SportAPI identity approval requires saved safe candidate context, prevents
     assert.equal(saved.mapping?.providerTeamId, providerTeamId);
     assert.equal(saved.mapping?.reviewedBy, "integration-test");
 
+    await cleanupPool.query(
+      `INSERT INTO team_identity_mappings
+        (tracked_team_id, canonical_name, provider, mapping_state, provider_identity_state,
+         provider_team_id, provider_team_name, country)
+       VALUES ($1,$2,'api-football','confirmed','cross_provider_confirmed',$3,$2,'Angola')`,
+      [legacyTeamId, trackedTeams[2]!.canonicalName, `legacy-provider-id-${suffix}`]
+    );
     const mappings = await getStoredTeamIdentityMappings(trackedTeams);
     assert.equal(mappings.state, "ready");
     const team = mappings.teams.find(item => item.trackedTeamId === trackedTeamId);
     assert.equal(team?.state, "confirmed");
     assert.equal(team?.providers.find(item => item.provider === "sportapi-ai")?.providerIdentityState, "operator_reviewed");
+    const legacy = mappings.teams.find(item => item.trackedTeamId === legacyTeamId);
+    assert.equal(legacy?.providers.find(item => item.provider === "api-football")?.providerIdentityState, "needs_review");
 
     const collision = await saveReviewedSportApiTeamIdentityMapping({
       trackedTeamId: secondTeamId, providerTeamId, reviewedBy: "integration-test"
@@ -535,7 +546,7 @@ test("SportAPI identity approval requires saved safe candidate context, prevents
     );
     assert.equal(Number(audit.rows[0]?.count), 1);
   } finally {
-    await cleanupPool.query("DELETE FROM provider_identity_review_events WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId]]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM provider_identity_review_events WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId, legacyTeamId]]).catch(() => undefined);
     await cleanupPool.query("DELETE FROM team_identity_mappings WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId]]).catch(() => undefined);
     await cleanupPool.query("DELETE FROM team_search_observations WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId]]).catch(() => undefined);
     await cleanupPool.end();
