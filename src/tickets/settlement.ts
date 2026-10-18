@@ -24,6 +24,27 @@ export interface TicketSelection {
   pick: TicketPick;
   /** Required only for total_goals; e.g. 2.5. */
   line?: number;
+  /** Audit-only source fields. These never influence settlement logic. */
+  sourceMetadata?: {
+    sourceApp: "BetMatrix";
+    sourceTicketId: string;
+    sourceTicketStatus?: string;
+    sourceTicketType?: string;
+    sourcePlacedAt?: string;
+    sourceLegId?: string;
+    sourceMarket: string;
+    sourceTargetTeam?: string;
+    sourceOdds?: number;
+    sourceHomeTeam: string;
+    sourceAwayTeam: string;
+    sourceLeague?: string;
+    sourceKickoffISO?: string;
+    sourceProviderFixtureIds?: {
+      apiFootball?: string;
+      sportApi?: string;
+      theRundown?: string;
+    };
+  };
 }
 
 export interface SelectionSettlement extends TicketSelection {
