@@ -962,10 +962,21 @@ app.post("/api/tickets/import-betmatrix", async (req: Request, res: Response) =>
       results.push({ sourceTicketId: ticket.sourceTicketId, ticketId: `betmatrix:${ticket.sourceTicketId}`, state: "imported" });
     } else if (saved.state === "conflict") {
       const existing = await getTicketById(`betmatrix:${ticket.sourceTicketId}`);
+      const existingSelections = existing.state === "ready" && existing.ticket && Array.isArray(existing.ticket.selections)
+        ? existing.ticket.selections as Array<Record<string, unknown>> : [];
+      const sameSelections = existingSelections.length === selections.length && selections.every((selection, index) => {
+        const prior = existingSelections[index];
+        return Boolean(prior) &&
+          prior.selectionId === selection.selectionId &&
+          prior.fixtureId === selection.fixtureId &&
+          prior.market === selection.market &&
+          prior.pick === selection.pick &&
+          (prior.line === undefined ? undefined : Number(prior.line)) === selection.line;
+      });
       if (existing.state === "ready" && existing.ticket &&
           Number(existing.ticket.stake_amount) === ticket.stakeAmount &&
           Number(existing.ticket.potential_payout) === ticket.potentialPayout &&
-          JSON.stringify(existing.ticket.selections) === JSON.stringify(selections)) {
+          sameSelections) {
         alreadyImported++;
         results.push({ sourceTicketId: ticket.sourceTicketId, ticketId: `betmatrix:${ticket.sourceTicketId}`, state: "already_imported" });
       } else {
