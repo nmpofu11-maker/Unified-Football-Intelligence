@@ -16,7 +16,7 @@ import {
   repairLegacyTeamIdentityStates
 } from "../src/storage/postgresObservations.js";
 import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
-import { createTicket, listTickets, reconcilePendingTickets } from "../src/tickets/store.js";
+import { createTicket, getTicketById, listTickets, reconcilePendingTickets } from "../src/tickets/store.js";
 import { listSavedPredictions } from "../src/prediction/pipeline.js";
 
 test("PostgreSQL persists raw observations idempotently without promoting them to verified evidence", async (t) => {
@@ -122,6 +122,13 @@ test("PostgreSQL ticket reconciliation marks an accumulator lost immediately whe
       ]
     });
     assert.equal(created.state, "saved");
+    const lookup = await getTicketById(ticketId);
+    assert.equal(lookup.state, "ready");
+    assert.ok(lookup.ticket);
+    assert.equal(lookup.ticket.ticket_id, ticketId);
+    assert.equal(Number(lookup.ticket.stake_amount), 10);
+    assert.equal(Number(lookup.ticket.potential_payout), 100);
+    assert.equal(Array.isArray(lookup.ticket.selections), true);
 
     const reconciliation = await reconcilePendingTickets();
     assert.equal(reconciliation.state, "ready");
