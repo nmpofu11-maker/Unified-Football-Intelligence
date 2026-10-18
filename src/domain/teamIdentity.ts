@@ -182,6 +182,16 @@ function observedSquadCategory(name: string): "women" | "youth" | "women_youth" 
   return "senior";
 }
 
+function matchesTrackedSquadCategory(trackedCategory: string | undefined, candidateName: string): boolean {
+  if (!trackedCategory) return true;
+  const observed = observedSquadCategory(candidateName);
+  if (trackedCategory === "senior") return observed === "senior";
+  if (trackedCategory === "women" || trackedCategory === "international_women") return observed === "women";
+  if (trackedCategory === "youth" || trackedCategory === "international_youth") return observed === "youth";
+  if (trackedCategory === "reserve") return observed === "reserve";
+  return true;
+}
+
 /**
  * Explains whether raw search candidates fit the user's watchlist context.
  * This is a review aid only: even a matching candidate is not a confirmed
@@ -247,9 +257,13 @@ export function classifyProviderIdentityState(
   reviewState?: TeamSearchCandidateAssessment["reviewState"]
 ): ProviderIdentityState {
   if (resolutionState === "confirmed" && identityPresent) return "cross_provider_confirmed";
+  // Cross-provider ambiguity describes the overall mapping, not necessarily
+  // the candidate returned by each provider. Preserve a unique, context-safe
+  // provider-scoped candidate without claiming that the two providers agree.
+  if (identityPresent && reviewState === "candidate_matches_watchlist_context") return "provider_candidate";
   if (resolutionState === "ambiguous") return "ambiguous";
   if (!identityPresent) return "unresolved";
-  return reviewState === "candidate_matches_watchlist_context" ? "provider_candidate" : "needs_review";
+  return "needs_review";
 }
 
 export interface TeamSearchIdentityResolution {
@@ -281,6 +295,9 @@ export function reconcileTeamSearchIdentity(
     const result = providerResults.find(item => item.provider === provider);
     const candidates = (result?.candidates ?? []).filter(candidate => {
       if (!matchingNames.has(normalise(candidate.name))) return false;
+      // Never confirm a provider identity whose squad qualifiers conflict with
+      // the user's watchlist category, even when that spelling is a curated alias.
+      if (!matchesTrackedSquadCategory(tracked.teamCategory, candidate.name)) return false;
       // The favourite watchlist's country is authoritative context. If a provider
       // supplies conflicting country metadata, never accept that candidate as this team.
       if (tracked.country?.trim() && candidate.country?.trim() &&
