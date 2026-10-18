@@ -138,6 +138,9 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
   const candidates = [...sportApiAi, ...sportmonks, ...apiFootball];
   const persistence = await persistProviderObservations(candidates);
   const canonicalEvidence = await persistCanonicalEvidence(candidates);
+  // Re-evaluate pending tickets after each fresh provider result-ingestion cycle.
+  // Settlement uses only the canonical verified-result table, never raw observations.
+  const ticketSettlement = await reconcilePendingTickets();
   const reconciliationPreview = previewCandidateReconciliation(candidates);
   const byStatus: Record<string, number> = {};
   for (const candidate of candidates) byStatus[candidate.status] = (byStatus[candidate.status] ?? 0) + 1;
@@ -145,6 +148,7 @@ app.get("/api/providers/fixtures", async (req: Request, res: Response) => {
     state: "provider_ingestion_completed", date,
     canonicalFixturesCorroborated: canonicalEvidence.corroboratedFixtures,
     verifiedResultsCreatedOrConfirmed: canonicalEvidence.verifiedResults,
+    ticketSettlement,
     conflictedGroups: canonicalEvidence.conflictedGroups,
     note: "Raw observations remain unverified. Canonical fixture evidence is stored separately and only cross-provider corroborated finished scores can enter the verified-result ledger. Single-source or conflicted evidence is never promoted.",
     persistence,
