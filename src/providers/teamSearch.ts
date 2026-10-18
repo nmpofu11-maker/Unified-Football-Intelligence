@@ -332,5 +332,6 @@ export async function searchTeamAcrossProviders(
     { Authorization: sportmonksKey },
     candidatesFromSportmonks
   );
-  const sportApiResult = searchSportApiCatalogue(query, acceptableNames, context, (process.env.SPORTAPI_AI_KEY ?? process.env.SPORTAPI_API_KEY ?? "").trim(), fetchImpl, signal);\n  return Promise.all([apiResult, sportmonksResult, sportApiResult]);
+  const sportApiResult = searchSportApiCatalogue(query, acceptableNames, context, (process.env.SPORTAPI_AI_KEY ?? process.env.SPORTAPI_API_KEY ?? "").trim(), fetchImpl, signal);
+  return Promise.all([apiResult, sportmonksResult, sportApiResult]);
 }
