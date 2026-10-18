@@ -197,11 +197,13 @@ async function loadReviewedProviderTeamIdentityMap(client: PoolClient): Promise<
     provider: string;
     provider_team_id: string;
     tracked_team_id: string;
-  }>(`SELECT provider, provider_team_id, tracked_team_id
+  }>(`SELECT provider, provider_team_id, MIN(tracked_team_id) AS tracked_team_id
       FROM team_identity_mappings
       WHERE mapping_state = 'confirmed'
         AND provider_identity_state IN ('cross_provider_confirmed','operator_reviewed')
-        AND provider_team_id IS NOT NULL`);
+        AND provider_team_id IS NOT NULL
+      GROUP BY provider, provider_team_id
+      HAVING COUNT(DISTINCT tracked_team_id) = 1`);
   const mappings: ReviewedProviderTeamIdentityMap = {};
   for (const row of result.rows) {
     mappings[`${row.provider}:${row.provider_team_id}`] = row.tracked_team_id;
