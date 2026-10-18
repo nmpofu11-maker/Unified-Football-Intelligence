@@ -1,14 +1,15 @@
 export interface TeamSearchCandidate {
-  provider: "api-football" | "sportmonks";
+  provider: "api-football" | "sportmonks" | "sportapi-ai";
   providerTeamId: string;
   name: string;
   country?: string;
   gender?: string;
   teamType?: string;
   shortCode?: string;
+  league?: string;
 }
 export interface TeamSearchProviderResult {
-  provider: "api-football" | "sportmonks";
+  provider: "api-football" | "sportmonks" | "sportapi-ai";
   state: "success" | "success_empty" | "unavailable" | "rate_limited" | "auth_error" | "http_error" | "request_error" | "schema_error";
   candidates: TeamSearchCandidate[];
   errorCode?: string;
@@ -126,6 +127,109 @@ async function requestSearch(
   }
 }
 
+
+const sportApiCatalogueCache = new Map<string, { expiresAt: number; value: unknown }>();
+const SPORTAPI_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+async function cachedSportApiJson(url: string, key: string, fetchImpl: typeof fetch, signal?: AbortSignal): Promise<unknown> {
+  const cached = sportApiCatalogueCache.get(url);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const response = await fetchImpl(url, { headers: { Accept: "application/json", "X-Api-Key": key }, signal: signal ?? AbortSignal.timeout(12_000) });
+  if (!response.ok) throw Object.assign(new Error("provider_http_error"), { status: response.status });
+  const value: unknown = await response.json();
+  sportApiCatalogueCache.set(url, { expiresAt: Date.now() + SPORTAPI_CACHE_TTL_MS, value });
+  return value;
+}
+function countryKey(value: string): string {
+  return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+}
+function parseSportApiLeagueCatalogue(payload: unknown): Array<{id:string;name:string;country:string}> | null {
+  const root = object(payload);
+  if (!root) return null;
+  const groups = Array.isArray(root.data) ? root.data : Array.isArray(root.leagues) ? root.leagues : null;
+  if (!groups) return null;
+  const output: Array<{id:string;name:string;country:string}> = [];
+  for (const entry of groups) {
+    const group = object(entry);
+    if (!group) continue;
+    const country = clean(group.country) ?? clean(object(group.country)?.name) ?? "";
+    const leagues = Array.isArray(group.leagues) ? group.leagues : [group];
+    for (const raw of leagues) {
+      const league = object(raw);
+      if (league?.id == null || !clean(league.name)) continue;
+      output.push({ id: String(league.id), name: clean(league.name)!, country: country || clean(league.country) || "" });
+    }
+  }
+  return output;
+}
+function parseSportApiLeagueTeams(payload: unknown, league: {id:string;name:string;country:string}): TeamSearchCandidate[] | null {
+  const root = object(payload);
+  if (!root) return null;
+  const teams: unknown[] | null = Array.isArray(root.teams) ? root.teams : Array.isArray(object(root.data)?.teams) ? object(root.data)!.teams : null;
+  if (!teams) return null;
+  return teams.flatMap((raw: unknown): TeamSearchCandidate[] => {
+    const team = object(raw);
+    if (team?.id == null || !clean(team.name)) return [];
+    const country = clean(team.country) ?? (league.country || undefined);
+    return [{ provider: "sportapi-ai", providerTeamId: String(team.id), name: clean(team.name)!, ...(country ? { country } : {}), league: league.name }];
+  });
+}
+async function searchSportApiCatalogue(
+  query: string,
+  acceptableNames: Set<string>,
+  context: {country?:string; league?:string; teamCategory?:string},
+  key: string,
+  fetchImpl: typeof fetch,
+  signal?: AbortSignal
+): Promise<TeamSearchProviderResult> {
+  const provider = "sportapi-ai" as const;
+  if (!key) return { provider, state: "unavailable", candidates: [], errorCode: "credential_not_configured" };
+  try {
+    const base = (process.env.SPORTAPI_AI_BASE_URL || "https://sportapi.ai/api").replace(/\/+$/, "");
+    const raw = await cachedSportApiJson(base + "/leagues", key, fetchImpl, signal);
+    const leagues = parseSportApiLeagueCatalogue(raw);
+    if (!leagues) return { provider, state: "schema_error", candidates: [], errorCode: "unexpected_league_catalogue_shape" };
+    const countryLeagues = context.country?.trim()
+      ? leagues.filter(league => countryKey(league.country) === countryKey(context.country!))
+      : leagues;
+    if (context.country?.trim() && countryLeagues.length === 0) {
+      return { provider, state: "success_empty", candidates: [], errorCode: "no_leagues_for_watchlist_country" };
+    }
+    const wantedLeague = countryKey(context.league ?? "");
+    const ranked = [...countryLeagues].sort((a,b) => {
+      const score = (item: typeof a) => {
+        const name = countryKey(item.name);
+        return name === wantedLeague ? 0 : wantedLeague && (name.includes(wantedLeague) || wantedLeague.includes(name)) ? 1 : 2;
+      };
+      return score(a)-score(b);
+    });
+    // Exact/related league names first; bounded country catalogue fallback helps
+    // lower divisions without silently treating a missing league label as proof.
+    const selected = ranked;
+    const collected = new Map<string, TeamSearchCandidate>();
+    for (const league of selected) {
+      const payload = await cachedSportApiJson(base + "/leagues/" + encodeURIComponent(league.id), key, fetchImpl, signal);
+      const candidates = parseSportApiLeagueTeams(payload, league);
+      if (!candidates) continue;
+      for (const candidate of candidates) {
+        if (!acceptableNames.has(normaliseSearchName(candidate.name))) continue;
+        if ((context.teamCategory === "women" || context.teamCategory === "international_women") && !/(^| )(women|woman|ladies|w)$/.test(normaliseSearchName(candidate.name))) continue;
+        if ((context.teamCategory === "youth" || context.teamCategory === "international_youth") && !/(^| )(u[0-9]{1,2}|youth|academy|junior|juniors)( |$)/.test(normaliseSearchName(candidate.name))) continue;
+        if (context.teamCategory === "reserve" && !/(^| )(ii|iii|iv|b|res|reserve|reserves)$/.test(normaliseSearchName(candidate.name))) continue;
+        if (context.teamCategory === "senior" && /(^| )(women|woman|ladies|w|u[0-9]{1,2}|youth|academy|junior|ii|iii|iv|b|res|reserve|reserves)( |$)/.test(normaliseSearchName(candidate.name))) continue;
+        collected.set(candidate.providerTeamId, candidate);
+      }
+      if ([...collected.values()].some(candidate => acceptableNames.has(normaliseSearchName(candidate.name)))) break;
+    }
+    const candidates = [...collected.values()];
+    return { provider, state: candidates.length ? "success" : "success_empty", candidates, ...(!candidates.length ? {errorCode:"sportapi_catalogue_no_exact_match_in_searched_leagues"} : {}) };
+  } catch (error) {
+    const status = error && typeof error === "object" ? (error as {status?:unknown}).status : undefined;
+    if (status === 429) return { provider, state: "rate_limited", candidates: [], errorCode: "http_429" };
+    if (status === 401 || status === 403) return { provider, state: "auth_error", candidates: [], errorCode: "provider_auth_error" };
+    return { provider, state: "request_error", candidates: [], errorCode: "sportapi_catalogue_request_failed" };
+  }
+}
+
 function normaliseSearchName(value: string): string {
   return value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
     .replace(/&/g, " and ").replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
@@ -140,13 +244,15 @@ export async function searchTeamAcrossProviders(
   teamName: string,
   signal?: AbortSignal,
   fetchImpl: typeof fetch = fetch,
-  fallbackQueries: string[] = []
+  fallbackQueries: string[] = [],
+  context: { country?: string; league?: string; teamCategory?: string } = {}
 ): Promise<TeamSearchProviderResult[]> {
   const query = teamName.trim();
   if (!query || query.length > 120) {
     return [
       { provider: "api-football", state: "unavailable", candidates: [], errorCode: "invalid_team_name" },
-      { provider: "sportmonks", state: "unavailable", candidates: [], errorCode: "invalid_team_name" }
+      { provider: "sportmonks", state: "unavailable", candidates: [], errorCode: "invalid_team_name" },
+      { provider: "sportapi-ai", state: "unavailable", candidates: [], errorCode: "invalid_team_name" }
     ];
   }
 
@@ -227,5 +333,6 @@ export async function searchTeamAcrossProviders(
     { Authorization: sportmonksKey },
     candidatesFromSportmonks
   );
-  return Promise.all([apiResult, sportmonksResult]);
+  const sportApiResult = searchSportApiCatalogue(query, acceptableNames, context, (process.env.SPORTAPI_AI_KEY ?? process.env.SPORTAPI_API_KEY ?? "").trim(), fetchImpl, signal);
+  return Promise.all([apiResult, sportmonksResult, sportApiResult]);
 }
