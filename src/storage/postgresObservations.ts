@@ -93,7 +93,7 @@ async function ensureSchema(client: PoolClient): Promise<void> {
       id BIGSERIAL PRIMARY KEY,
       tracked_team_id TEXT NOT NULL,
       tracked_team_name TEXT NOT NULL,
-      provider TEXT NOT NULL CHECK (provider IN ('api-football','sportmonks')),
+      provider TEXT NOT NULL CHECK (provider IN ('api-football','sportmonks','sportapi-ai')),
       search_state TEXT NOT NULL,
       provider_team_id TEXT,
       provider_team_name TEXT,
@@ -101,12 +101,16 @@ async function ensureSchema(client: PoolClient): Promise<void> {
       gender TEXT,
       team_type TEXT,
       short_code TEXT,
+      league TEXT,
       error_code TEXT,
       searched_at TIMESTAMPTZ NOT NULL,
       candidate JSONB,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await client.query(`ALTER TABLE team_search_observations ADD COLUMN IF NOT EXISTS league TEXT`);
+  await client.query(`ALTER TABLE team_search_observations DROP CONSTRAINT IF EXISTS team_search_observations_provider_check`);
+  await client.query(`ALTER TABLE team_search_observations ADD CONSTRAINT team_search_observations_provider_check CHECK (provider IN ('api-football','sportmonks','sportapi-ai'))`);
   await client.query(`
     CREATE INDEX IF NOT EXISTS team_search_observations_latest_idx
     ON team_search_observations (tracked_team_id, provider, searched_at DESC)
@@ -736,7 +740,7 @@ export async function persistTeamSearchObservations(
   const candidateCount = searches.reduce((total, item) => total + item.providers.reduce((n, result) => n + result.candidates.length, 0), 0);
   if (!configuredPool) return { state: "not_configured", searchGroups, candidateCount, rowsInserted: 0 };
   if (searches.some(item => !item.trackedTeamId.trim() || !item.canonicalName.trim() ||
-      item.providers.some(provider => !["api-football", "sportmonks"].includes(provider.provider)))) {
+      item.providers.some(provider => !["api-football", "sportmonks", "sportapi-ai"].includes(provider.provider)))) {
     return { state: "error", searchGroups, candidateCount, rowsInserted: 0, errorCode: "team_search_validation_failed" };
   }
   let client: PoolClient | undefined;
@@ -753,12 +757,12 @@ export async function persistTeamSearchObservations(
           await client.query(
             `INSERT INTO team_search_observations
               (tracked_team_id, tracked_team_name, provider, search_state, provider_team_id,
-               provider_team_name, country, gender, team_type, short_code, error_code, searched_at, candidate)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb)`,
+               provider_team_name, country, gender, team_type, short_code, league, error_code, searched_at, candidate)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb)`,
             [
               search.trackedTeamId, search.canonicalName, providerResult.provider, providerResult.state,
               candidate?.providerTeamId ?? null, candidate?.name ?? null, candidate?.country ?? null,
-              candidate?.gender ?? null, candidate?.teamType ?? null, candidate?.shortCode ?? null,
+              candidate?.gender ?? null, candidate?.teamType ?? null, candidate?.shortCode ?? null, candidate?.league ?? null,
               providerResult.errorCode ?? null, searchedAt, candidate ? JSON.stringify(candidate) : null
             ]
           );
@@ -778,7 +782,7 @@ export async function persistTeamSearchObservations(
 
 
 export interface StoredTeamSearchProviderReview {
-  provider: "api-football" | "sportmonks";
+  provider: "api-football" | "sportmonks" | "sportapi-ai";
   state: string;
   searchedAt: string;
   candidates: Array<{
@@ -821,7 +825,7 @@ export async function getStoredTeamSearchReview(
     const result = await client.query<{
       tracked_team_id: string;
       tracked_team_name: string;
-      provider: "api-football" | "sportmonks";
+      provider: "api-football" | "sportmonks" | "sportapi-ai";
       search_state: string;
       provider_team_id: string | null;
       provider_team_name: string | null;
@@ -829,6 +833,7 @@ export async function getStoredTeamSearchReview(
       gender: string | null;
       team_type: string | null;
       short_code: string | null;
+      league: string | null;
       error_code: string | null;
       searched_at: Date;
     }>(`
@@ -839,7 +844,7 @@ export async function getStoredTeamSearchReview(
       )
       SELECT s.tracked_team_id, s.tracked_team_name, s.provider, s.search_state,
              s.provider_team_id, s.provider_team_name, s.country, s.gender,
-             s.team_type, s.short_code, s.error_code, s.searched_at
+             s.team_type, s.short_code, s.league, s.error_code, s.searched_at
       FROM team_search_observations s
       JOIN latest l
         ON l.tracked_team_id = s.tracked_team_id
@@ -872,7 +877,8 @@ export async function getStoredTeamSearchReview(
           ...(row.country ? { country: row.country } : {}),
           ...(row.gender ? { gender: row.gender } : {}),
           ...(row.team_type ? { teamType: row.team_type } : {}),
-          ...(row.short_code ? { shortCode: row.short_code } : {})
+          ...(row.short_code ? { shortCode: row.short_code } : {}),
+          ...(row.league ? { league: row.league } : {})
         });
       }
       team.state = "searched";
@@ -916,9 +922,9 @@ export async function reconcileStoredTeamSearchCandidates(
     client = await configuredPool.connect();
     await ensureSchema(client);
     const latest = await client.query<{
-      tracked_team_id: string; provider: "api-football" | "sportmonks"; search_state: string;
+      tracked_team_id: string; provider: "api-football" | "sportmonks" | "sportapi-ai"; search_state: string;
       provider_team_id: string | null; provider_team_name: string | null; country: string | null;
-      gender: string | null; team_type: string | null; short_code: string | null; error_code: string | null;
+      gender: string | null; team_type: string | null; short_code: string | null; league: string | null; error_code: string | null;
       searched_at: Date;
     }>(`
       WITH latest AS (
@@ -927,7 +933,7 @@ export async function reconcileStoredTeamSearchCandidates(
         GROUP BY tracked_team_id, provider
       )
       SELECT s.tracked_team_id, s.provider, s.search_state, s.provider_team_id,
-             s.provider_team_name, s.country, s.gender, s.team_type, s.short_code,
+             s.provider_team_name, s.country, s.gender, s.team_type, s.short_code, s.league,
              s.error_code, s.searched_at
       FROM team_search_observations s
       JOIN latest l ON l.tracked_team_id = s.tracked_team_id
@@ -964,14 +970,15 @@ export async function reconcileStoredTeamSearchCandidates(
         });
       }
       timestampsByTeam.set(row.tracked_team_id, row.searched_at.toISOString());
-      if (!["success","success_empty"].includes(row.search_state)) failedTeams.add(row.tracked_team_id);
+      if (row.provider !== "sportapi-ai" && !["success","success_empty"].includes(row.search_state)) failedTeams.add(row.tracked_team_id);
     }
     const mappings: TeamSearchIdentityResolution[] = [];
     let skippedIncompleteSearch = 0;
     await client.query("BEGIN");
     for (const team of trackedTeams) {
       const providerResults = resultsByTeam.get(team.id) ?? [];
-      const complete = providerResults.length === 2 && !failedTeams.has(team.id);
+      const primaryProviderResults = providerResults.filter(item => item.provider === "api-football" || item.provider === "sportmonks");
+      const complete = primaryProviderResults.length === 2 && !failedTeams.has(team.id);
       // Reconcile any available provider observations. A timeout, provider error,
       // or empty catalogue response must not discard a unique exact candidate
       // returned by the healthy provider. The resolver keeps partial identities
@@ -982,7 +989,7 @@ export async function reconcileStoredTeamSearchCandidates(
       }
       if (!complete) skippedIncompleteSearch++;
       const resolution = reconcileTeamSearchIdentity(team, providerResults);
-      const candidateAssessments = reviewTeamSearchCandidates(team, providerResults.map(item => ({
+      const candidateAssessments = reviewTeamSearchCandidates(team, primaryProviderResults.map(item => ({
         provider: item.provider,
         candidates: item.candidates.map(candidate => ({ providerTeamId: candidate.providerTeamId, name: candidate.name, ...(candidate.country ? { country: candidate.country } : {}) }))
       })));
