@@ -233,6 +233,16 @@ app.get("/api/data-pipeline/status", async (_req: Request, res: Response) => {
   });
 });
 
+app.get("/api/automation/provider-poll/status", (_req: Request, res: Response) => {
+  return res.json({
+    ...automaticPollStatus,
+    enabled: autoPollingEnabled && Number.isInteger(autoPollingMinutes) && autoPollingMinutes >= 5 && autoPollingMinutes <= 60,
+    intervalMinutes: autoPollingMinutes,
+    databaseConfigured: Boolean(process.env.DATABASE_URL?.trim()),
+    note: "A completed cycle only confirms the poll ran. Candidate counts and corroborated/verified evidence counts are separate; zero results never implies fabricated data. Provider-level diagnostics show adapter failures."
+  });
+});
+
 app.get("/api/providers/status", (_req: Request, res: Response) => {
   const providers = providerStatus();
   res.json({ ...aggregateProviderStatus(providers.map(p => p.diagnostics)), providers });
@@ -988,42 +998,94 @@ load();</script>
 /**
  * Optional bounded background ingestion keeps verified result evidence current so
  * pending tickets can settle without someone manually opening the provider page.
- * It is opt-in because each cycle makes provider API requests.
+ * The status endpoint reports execution separately from evidence availability.
  */
+const autoPollingEnabled = process.env.AUTO_PROVIDER_POLLING_ENABLED?.trim().toLowerCase() === "true";
+const autoPollingMinutes = Number(process.env.AUTO_PROVIDER_POLL_INTERVAL_MINUTES ?? 10);
+type AutomaticPollState = "disabled" | "not_started" | "running" | "completed" | "completed_empty" | "partial" | "error";
+const automaticPollStatus: {
+  state: AutomaticPollState;
+  startedAt: string | null;
+  completedAt: string | null;
+  cyclesCompleted: number;
+  datesChecked: string[];
+  candidateCount: number | null;
+  corroboratedFixtures: number | null;
+  verifiedResults: number | null;
+  failedDateCount: number;
+  lastErrorCode: string | null;
+} = {
+  state: autoPollingEnabled ? "not_started" : "disabled",
+  startedAt: null, completedAt: null, cyclesCompleted: 0, datesChecked: [],
+  candidateCount: null, corroboratedFixtures: null, verifiedResults: null,
+  failedDateCount: 0, lastErrorCode: null
+};
+let automaticPollInProgress = false;
+
 async function runAutomaticProviderPoll(): Promise<void> {
-  if (!process.env.DATABASE_URL?.trim()) return;
-  const dates = new Set<string>();
-  const now = new Date();
-  for (const offset of [0, 1]) {
-    const day = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000);
-    dates.add(day.toISOString().slice(0, 10));
-  }
-  for (const date of dates) {
-    try {
-      const query = { dateFromUtc: date, dateToUtc: date };
-      const batches = await Promise.all([
-        sportApiAiProvider.fetchFixtures(query),
-        sportmonksProvider.fetchFixtures(query),
-        apiFootballProvider.fetchFixtures(query)
-      ]);
-      const candidates = batches.flat();
-      if (candidates.length > 0) {
-        await persistProviderObservations(candidates);
-        await persistCanonicalEvidence(candidates);
-      }
-      // Even an empty provider response can still reconcile tickets against
-      // previously verified results; it never fabricates a result.
-      await reconcilePendingTickets();
-    } catch {
-      // A failed provider cycle is intentionally silent here: provider diagnostics
-      // expose adapter failures without leaking secrets or interrupting the server.
+  if (automaticPollInProgress) return;
+  automaticPollInProgress = true;
+  automaticPollStatus.state = "running";
+  automaticPollStatus.startedAt = new Date().toISOString();
+  automaticPollStatus.completedAt = null;
+  automaticPollStatus.datesChecked = [];
+  automaticPollStatus.candidateCount = 0;
+  automaticPollStatus.corroboratedFixtures = 0;
+  automaticPollStatus.verifiedResults = 0;
+  automaticPollStatus.failedDateCount = 0;
+  automaticPollStatus.lastErrorCode = null;
+  try {
+    if (!process.env.DATABASE_URL?.trim()) {
+      automaticPollStatus.state = "error";
+      automaticPollStatus.lastErrorCode = "database_not_configured";
+      return;
     }
+    const dates = new Set<string>();
+    const now = new Date();
+    for (const offset of [0, 1]) {
+      const day = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000);
+      dates.add(day.toISOString().slice(0, 10));
+    }
+    for (const date of dates) {
+      automaticPollStatus.datesChecked.push(date);
+      try {
+        const query = { dateFromUtc: date, dateToUtc: date };
+        const batches = await Promise.all([
+          sportApiAiProvider.fetchFixtures(query),
+          sportmonksProvider.fetchFixtures(query),
+          apiFootballProvider.fetchFixtures(query)
+        ]);
+        const candidates = batches.flat();
+        automaticPollStatus.candidateCount = (automaticPollStatus.candidateCount ?? 0) + candidates.length;
+        if (candidates.length > 0) {
+          await persistProviderObservations(candidates);
+          const canonical = await persistCanonicalEvidence(candidates);
+          automaticPollStatus.corroboratedFixtures = (automaticPollStatus.corroboratedFixtures ?? 0) + canonical.corroboratedFixtures;
+          automaticPollStatus.verifiedResults = (automaticPollStatus.verifiedResults ?? 0) + canonical.verifiedResults;
+        }
+        // Empty responses can still reconcile tickets against previously verified results.
+        await reconcilePendingTickets();
+      } catch {
+        automaticPollStatus.failedDateCount += 1;
+        automaticPollStatus.lastErrorCode = "provider_poll_date_failed";
+      }
+    }
+    automaticPollStatus.state = automaticPollStatus.failedDateCount > 0
+      ? (automaticPollStatus.failedDateCount === automaticPollStatus.datesChecked.length ? "error" : "partial")
+      : (automaticPollStatus.candidateCount === 0 ? "completed_empty" : "completed");
+    automaticPollStatus.cyclesCompleted += 1;
+  } catch {
+    automaticPollStatus.state = "error";
+    automaticPollStatus.lastErrorCode = automaticPollStatus.lastErrorCode ?? "provider_poll_cycle_failed";
+  } finally {
+    automaticPollStatus.completedAt = new Date().toISOString();
+    automaticPollInProgress = false;
   }
 }
 
-const autoPollingEnabled = process.env.AUTO_PROVIDER_POLLING_ENABLED?.trim().toLowerCase() === "true";
-const autoPollingMinutes = Number(process.env.AUTO_PROVIDER_POLL_INTERVAL_MINUTES ?? 10);
 if (autoPollingEnabled && (!Number.isInteger(autoPollingMinutes) || autoPollingMinutes < 5 || autoPollingMinutes > 60)) {
+  automaticPollStatus.state = "disabled";
+  automaticPollStatus.lastErrorCode = "invalid_poll_interval";
   console.error("Automatic provider polling disabled: AUTO_PROVIDER_POLL_INTERVAL_MINUTES must be an integer from 5 to 60.");
 }
 const port = Number(process.env.PORT ?? 3000);
