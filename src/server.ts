@@ -4,6 +4,7 @@ import express, { type Request, type Response } from "express";
 import { timingSafeEqual } from "node:crypto";
 import { aggregateProviderStatus } from "./status/aggregate.js";
 import { createTicket, listTickets, reconcilePendingTickets } from "./tickets/store.js";
+import { parseBetMatrixTicket } from "./tickets/betmatrixImport.js";
 import { loadOutOfSampleEvaluation } from "./evaluation/store.js";
 import type { ProviderDiagnostics } from "./providers/provider.js";
 import { SportApiAiProvider } from "./providers/adapters/sportApiAi.js";
@@ -13,7 +14,7 @@ import { ApiFootballProvider } from "./providers/adapters/apiFootball.js";
 import { hasCompleteReviewedProviderTeamIdentityCoverage, previewCandidateReconciliation } from "./domain/reconcileCandidates.js";
 import { curatedTeamSearchAliases, discoverTrackedTeamIdentities, reviewTeamSearchCandidates } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
-import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getReviewedProviderTeamIdentityMap, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, saveReviewedSportApiTeamIdentityMapping, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
+import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getReviewedProviderTeamIdentityMap, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, saveReviewedSportApiTeamIdentityMapping, resolveCanonicalFixtureProviderRefs, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
 import { listReviewedTeamAliases, listReviewedTeamMappings, listSavedPredictions, predictStoredFixture, predictionStorageStatus, saveReviewedTeamAlias, saveReviewedTeamMapping } from "./prediction/pipeline.js";
 
 const app = express();
@@ -882,6 +883,102 @@ app.post("/api/tickets", async (req: Request, res: Response) => {
   const code = result.state === "saved" ? 201 : result.state === "conflict" ? 409 :
     result.state === "invalid_input" ? 400 : 503;
   return res.status(code).json(result);
+});
+
+app.post("/api/tickets/import-betmatrix", async (req: Request, res: Response) => {
+  if (!ticketAccessAllowed(req, res)) return;
+  const body = req.body && typeof req.body === "object" ? req.body as Record<string, unknown> : {};
+  if (!Array.isArray(body.tickets) || body.tickets.length === 0 || body.tickets.length > 50) {
+    return res.status(400).json({
+      state: "invalid_input",
+      reason: "tickets_array_required_with_1_to_50_entries"
+    });
+  }
+
+  const results: Array<{ sourceTicketId?: string; state: string; reason?: string; ticketId?: string }> = [];
+  let imported = 0;
+  let alreadyImported = 0;
+  let skippedNonPending = 0;
+  let rejected = 0;
+
+  for (const rawTicket of body.tickets) {
+    const parsed = parseBetMatrixTicket(rawTicket);
+    if (parsed.state === "not_pending") {
+      skippedNonPending++;
+      results.push({ state: "skipped", reason: parsed.reason });
+      continue;
+    }
+    if (parsed.state === "invalid") {
+      rejected++;
+      results.push({ state: "rejected", reason: parsed.reason });
+      continue;
+    }
+
+    const ticket = parsed.ticket;
+    const refs = ticket.selections.flatMap(selection => selection.refs);
+    const resolved = await resolveCanonicalFixtureProviderRefs(refs);
+    if (resolved.state !== "ready") {
+      rejected++;
+      results.push({ sourceTicketId: ticket.sourceTicketId, state: "rejected", reason: resolved.errorCode ?? resolved.state });
+      continue;
+    }
+    const byRef = new Map(resolved.mappings.map(mapping => [
+      `${mapping.provider}:${mapping.providerFixtureId}`, mapping
+    ]));
+    let unresolvedReason: string | undefined;
+    const selections = ticket.selections.map(selection => {
+      const mappings = selection.refs.map(ref => byRef.get(`${ref.provider}:${ref.providerFixtureId}`));
+      if (mappings.some(mapping => !mapping || mapping.state !== "resolved" || !mapping.canonicalKey)) {
+        unresolvedReason = "provider_fixture_id_not_linked_to_a_current_corroborated_canonical_fixture";
+        return null;
+      }
+      const keys = new Set(mappings.map(mapping => mapping!.canonicalKey));
+      if (keys.size !== 1) {
+        unresolvedReason = "provider_fixture_ids_resolve_to_conflicting_canonical_fixtures";
+        return null;
+      }
+      return {
+        selectionId: selection.selectionId,
+        fixtureId: [...keys][0]!,
+        market: selection.market,
+        pick: selection.pick,
+        ...(selection.line !== undefined ? { line: selection.line } : {})
+      };
+    });
+    if (unresolvedReason || selections.some(selection => selection === null)) {
+      rejected++;
+      results.push({ sourceTicketId: ticket.sourceTicketId, state: "rejected", reason: unresolvedReason ?? "ticket_selection_unresolved" });
+      continue;
+    }
+
+    const saved = await createTicket({
+      ticketId: `betmatrix:${ticket.sourceTicketId}`,
+      stakeAmount: ticket.stakeAmount,
+      potentialPayout: ticket.potentialPayout,
+      selections: selections as NonNullable<(typeof selections)[number]>[]
+    });
+    if (saved.state === "saved") {
+      imported++;
+      results.push({ sourceTicketId: ticket.sourceTicketId, ticketId: `betmatrix:${ticket.sourceTicketId}`, state: "imported" });
+    } else if (saved.state === "conflict") {
+      alreadyImported++;
+      results.push({ sourceTicketId: ticket.sourceTicketId, ticketId: `betmatrix:${ticket.sourceTicketId}`, state: "already_imported" });
+    } else {
+      rejected++;
+      results.push({ sourceTicketId: ticket.sourceTicketId, state: "rejected", reason: "ticket_store_unavailable_or_validation_failed" });
+    }
+  }
+
+  return res.status(200).json({
+    state: "completed",
+    received: body.tickets.length,
+    imported,
+    alreadyImported,
+    skippedNonPending,
+    rejected,
+    results,
+    note: "Only pending BetMatrix tickets with supported markets and provider fixture IDs linked to current corroborated canonical fixtures are imported. Source settlement statuses, odds and model claims are not trusted; imported tickets settle only against Unified Football Intelligence verified results."
+  });
 });
 
 app.get("/api/tickets", async (req: Request, res: Response) => {
