@@ -464,7 +464,10 @@ export async function persistCanonicalEvidence(
     // is explicitly reviewed and the two sides resolve to distinct canonical teams.
     // Otherwise preserve the existing snapshot while upserting only candidates that
     // pass the reviewed-ID gate; legacy rows remain hidden by identity_reviewed=false.
-    if (options.replaceSnapshot && candidates.length > 0 && snapshotIdentityComplete) {
+    // Never replace a populated snapshot with an empty eligible candidate set.
+    // This occurs when a replay contains only optional-provider candidates whose
+    // IDs have not yet been explicitly reviewed.
+    if (options.replaceSnapshot && candidates.length > 0 && snapshotCandidates.length > 0 && snapshotIdentityComplete) {
       await client.query("DELETE FROM canonical_fixture_provider_refs");
       await client.query("DELETE FROM verified_settled_results");
       await client.query("DELETE FROM canonical_fixture_evidence");
@@ -587,7 +590,7 @@ export async function persistCanonicalEvidence(
       corroboratedFixtures: corroborated.length,
       verifiedResults: eligibleResults.length,
       conflictedGroups: conflicted.length,
-      ...(options.replaceSnapshot && candidates.length > 0 && !snapshotIdentityComplete
+      ...(options.replaceSnapshot && candidates.length > 0 && (snapshotCandidates.length === 0 || !snapshotIdentityComplete)
         ? { snapshotReplacementSkipped: true } : {})
     };
   } catch (error) {
