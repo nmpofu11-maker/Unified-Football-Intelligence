@@ -1055,7 +1055,6 @@ export async function saveReviewedSportApiTeamIdentityMapping(
     const assessment = reviewTeamSearchCandidates(tracked, [{
       provider: "sportapi-ai",
       candidates: [{
-        provider: "sportapi-ai",
         providerTeamId,
         name: candidate.provider_team_name,
         ...(candidate.country ? { country: candidate.country } : {}),
