@@ -14,6 +14,7 @@ export interface CandidateMatchPreview {
   statuses: string[];
   scores: Array<{ home: number; away: number }>;
   reasons: string[];
+  providerFixtureRefs?: Array<{ provider: string; providerFixtureId: string; observedAt: string }>;
 }
 
 const normalise = (value: string): string =>
@@ -179,7 +180,12 @@ export function previewCandidateReconciliation(
         kickoffUtc: representative.kickoffUtc,
         statuses,
         scores,
-        reasons
+        reasons,
+        providerFixtureRefs: group.map(item => ({
+          provider: item.provider,
+          providerFixtureId: item.providerFixtureId,
+          observedAt: item.observedAt
+        }))
       });
     }
   }
