@@ -169,7 +169,7 @@ function parseSportApiLeagueTeams(payload: unknown, league: {id:string;name:stri
   return teams.flatMap((raw): TeamSearchCandidate[] => {
     const team = object(raw);
     if (team?.id == null || !clean(team.name)) return [];
-    return [{ provider: "sportapi-ai", providerTeamId: String(team.id), name: clean(team.name)!, country: clean(team.country) ?? league.country || undefined, league: league.name }];
+    return [{ provider: "sportapi-ai", providerTeamId: String(team.id), name: clean(team.name)!, country: clean(team.country) ?? (league.country || undefined), league: league.name }];
   });
 }
 async function searchSportApiCatalogue(
