@@ -215,6 +215,21 @@ async function ensureSchema(client: PoolClient): Promise<void> {
   // They remain in storage for audit but are excluded from forecasts and settlement.
   await client.query(`ALTER TABLE canonical_fixture_evidence ADD COLUMN IF NOT EXISTS identity_reviewed BOOLEAN NOT NULL DEFAULT FALSE`);
   await client.query(`
+    CREATE TABLE IF NOT EXISTS canonical_fixture_provider_refs (
+      provider TEXT NOT NULL CHECK (provider IN ('api-football','sportmonks','sportapi-ai')),
+      provider_fixture_id TEXT NOT NULL,
+      canonical_key TEXT REFERENCES canonical_fixture_evidence(canonical_key) ON DELETE CASCADE,
+      mapping_state TEXT NOT NULL CHECK (mapping_state IN ('confirmed','conflicted')),
+      observed_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (provider, provider_fixture_id)
+    )
+  `);
+  await client.query(`
+    CREATE INDEX IF NOT EXISTS canonical_fixture_provider_refs_key_idx
+    ON canonical_fixture_provider_refs (canonical_key)
+  `);
+  await client.query(`
     CREATE TABLE IF NOT EXISTS verified_settled_results (
       canonical_key TEXT PRIMARY KEY REFERENCES canonical_fixture_evidence(canonical_key),
       home_goals INTEGER NOT NULL CHECK (home_goals >= 0),
