@@ -153,7 +153,7 @@ export function discoverTrackedTeamIdentities(
 
 
 export interface TeamSearchCandidateAssessment {
-  provider: "api-football" | "sportmonks";
+  provider: "api-football" | "sportmonks" | "sportapi-ai";
   providerTeamId: string;
   providerName: string;
   nameMatch: "canonical_name" | "curated_alias" | "unrelated_search_result";
@@ -200,7 +200,7 @@ function matchesTrackedSquadCategory(trackedCategory: string | undefined, candid
 export function reviewTeamSearchCandidates(
   tracked: TrackedTeamIdentity,
   providerResults: Array<{
-    provider: "api-football" | "sportmonks";
+    provider: "api-football" | "sportmonks" | "sportapi-ai";
     candidates: Array<{ providerTeamId: string; name: string; country?: string }>;
   }>
 ): TeamSearchCandidateAssessment[] {
