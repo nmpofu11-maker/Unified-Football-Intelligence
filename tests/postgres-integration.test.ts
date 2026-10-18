@@ -11,6 +11,7 @@ import {
 } from "../src/storage/postgresObservations.js";
 import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
 import { createTicket, listTickets, reconcilePendingTickets } from "../src/tickets/store.js";
+import { listSavedPredictions } from "../src/prediction/pipeline.js";
 
 test("PostgreSQL persists raw observations idempotently without promoting them to verified evidence", async (t) => {
   const connectionString = process.env.DATABASE_URL?.trim();
@@ -325,6 +326,74 @@ test("unmapped SportAPI fixture IDs do not block a safe snapshot rebuild from ma
       await cleanupPool.query("DELETE FROM canonical_fixture_evidence WHERE canonical_key = ANY($1::text[])", [keys]).catch(() => undefined);
     }
     await cleanupPool.query("DELETE FROM team_identity_mappings WHERE tracked_team_id = ANY($1::text[])", [[trackedHomeId, trackedAwayId]]).catch(() => undefined);
+    await cleanupPool.end();
+  }
+});
+
+
+test("forecast ledger labels legacy unreviewed fixture identities instead of presenting them as currently eligible", async (t) => {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");
+    return;
+  }
+
+  const reviewedFixtureId = `ci-ledger-reviewed-${randomUUID()}`;
+  const legacyFixtureId = `ci-ledger-legacy-${randomUUID()}`;
+  const missingFixtureId = `ci-ledger-missing-${randomUUID()}`;
+  const fixtureKeys = [reviewedFixtureId, legacyFixtureId, missingFixtureId];
+  const kickoffUtc = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const generatedAt = new Date().toISOString();
+  const cleanupPool = new Pool({ connectionString, max: 1 });
+
+  try {
+    const canonical = await getCanonicalEvidenceSummary();
+    assert.equal(canonical.state, "ready");
+    const ledger = await listSavedPredictions(100);
+    assert.equal(ledger.state, "ready");
+
+    for (const [fixtureId, identityReviewed] of [
+      [reviewedFixtureId, true],
+      [legacyFixtureId, false]
+    ] as const) {
+      await cleanupPool.query(
+        `INSERT INTO canonical_fixture_evidence
+          (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state, identity_reviewed)
+         VALUES ($1,$2,$3,$4,$5,'scheduled',$6,'corroborated',$7)`,
+        [fixtureId, kickoffUtc, `Home ${fixtureId}`, `Away ${fixtureId}`, "Ledger Test League", ["api-football", "sportmonks"], identityReviewed]
+      );
+    }
+
+    for (const fixtureId of fixtureKeys) {
+      await cleanupPool.query(
+        `INSERT INTO prediction_ledger
+          (canonical_key, generated_at, model_id, model_version, evidence_hash, evidence_state, forecast, diagnostics)
+         VALUES ($1,$2,$3,$4,$5,'exploratory',$6::jsonb,$7::jsonb)`,
+        [fixtureId, generatedAt, `integration-${fixtureId}`, "test-v1", `hash-${fixtureId}`,
+          JSON.stringify({ homeWin: null, draw: null, awayWin: null }), JSON.stringify({ test: true })]
+      );
+    }
+
+    const result = await listSavedPredictions(100);
+    assert.equal(result.state, "ready");
+    const predictions = result.predictions as Array<{
+      canonical_key: string;
+      currently_identity_eligible: boolean;
+      current_identity_status: string;
+    }>;
+    const reviewed = predictions.find(item => item.canonical_key === reviewedFixtureId);
+    const legacy = predictions.find(item => item.canonical_key === legacyFixtureId);
+    const missing = predictions.find(item => item.canonical_key === missingFixtureId);
+    assert.equal(reviewed?.currently_identity_eligible, true);
+    assert.equal(reviewed?.current_identity_status, "identity_gate_passed");
+    assert.equal(legacy?.currently_identity_eligible, false);
+    assert.equal(legacy?.current_identity_status, "legacy_unreviewed_identity");
+    assert.equal(missing?.currently_identity_eligible, false);
+    assert.equal(missing?.current_identity_status, "canonical_fixture_missing");
+  } finally {
+    await cleanupPool.query("DELETE FROM prediction_ledger WHERE canonical_key = ANY($1::text[])", [fixtureKeys]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM verified_settled_results WHERE canonical_key = ANY($1::text[])", [fixtureKeys]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM canonical_fixture_evidence WHERE canonical_key = ANY($1::text[])", [fixtureKeys]).catch(() => undefined);
     await cleanupPool.end();
   }
 });
