@@ -923,6 +923,11 @@ app.get("/", (_req: Request, res: Response) => res.type("html").send(`<!doctype 
 <pre id="history-output" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No historical backfill run yet.</pre>
 </section>
 <section class="card" style="margin-top:14px"><h2>Favourite-team identity discovery</h2><p class="muted">Searches the 80 saved favourites in small, rate-limited batches. Exact name/alias plus matching country from both providers is required before a provider identity is confirmed. This does not create historical match results.</p><div class="row"><button id="discover-teams">Discover favourite teams</button><span id="team-discovery-progress" class="small">Not started</span></div><pre id="team-discovery-log" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">Ready when PostgreSQL and provider credentials are configured.</pre></section>
+<section class="card" style="margin-top:14px"><h2>Review SportAPI.ai team identities</h2>
+<p class="muted">SportAPI.ai catalogue candidates are not auto-confirmed. Load the latest saved candidates, check the name, country and squad category, and explicitly approve one identity. This only enables fixture identity matching; it does not verify results or calibrate forecasts.</p>
+<div class="row"><label for="sportapi-review-team">Favourite team</label><select id="sportapi-review-team">${teamSeed.teams.map(team => '<option value="' + escapeHtml(team.id) + '">' + escapeHtml(team.canonicalName) + ' — ' + escapeHtml(team.country ?? "Country unknown") + '</option>').join("")}</select><button id="load-sportapi-candidates">Load saved candidates</button></div>
+<div class="row"><label for="sportapi-review-candidate">SportAPI.ai candidate</label><select id="sportapi-review-candidate"><option value="">Load candidates first</option></select><label for="sportapi-reviewer">Reviewer identifier</label><input id="sportapi-reviewer" type="text" maxlength="160" placeholder="Your initials or reviewer ID"><button id="confirm-sportapi-candidate">Confirm identity</button></div>
+<pre id="sportapi-review-log" class="small" style="white-space:pre-wrap;overflow-wrap:anywhere">No SportAPI identity review loaded yet.</pre></section>
 <section class="card" style="margin-top:14px"><h2>Prediction engine</h2>
 <p class="muted">Select a canonical fixture key from <code>/api/fixtures</code>. The engine reads only verified historical results from PostgreSQL; it does not accept manually supplied statistics. Any missing evidence is reported as a withheld forecast.</p>
 <div class="row"><label for="prediction-fixture-key">Canonical fixture key</label><input id="prediction-fixture-key" type="text" placeholder="Paste canonical_key from /api/fixtures"><button id="run-prediction">Run forecast</button></div>
@@ -1033,6 +1038,52 @@ document.getElementById('fetch-fixtures').addEventListener('click',async()=>{con
    recommendationEnabled:data.recommendationEnabled,note:data.note||evaluation?.note,reason:data.reason
   },null,2);
  }catch(e){state.textContent='Unavailable';out.textContent='Evaluation endpoint unavailable. No performance metrics are inferred.'}
+ finally{button.disabled=false}
+});
+document.getElementById('load-sportapi-candidates').addEventListener('click',async()=>{
+ const button=document.getElementById('load-sportapi-candidates'),teamId=document.getElementById('sportapi-review-team').value;
+ const candidateSelect=document.getElementById('sportapi-review-candidate'),out=document.getElementById('sportapi-review-log'),token=document.getElementById('provider-token').value;
+ button.disabled=true;out.textContent='Loading saved SportAPI.ai candidates…';
+ try{
+  const response=await fetch('/api/teams/provider-search/results',{headers:token?{'x-provider-diagnostics-token':token}:{}});
+  const data=await response.json();
+  if(!response.ok||data.state!=='ready')throw new Error(data.reason||data.errorCode||data.state||'provider_search_results_unavailable');
+  const team=(data.teams||[]).find(item=>item.trackedTeamId===teamId);
+  const provider=(team?.providers||[]).find(item=>item.provider==='sportapi-ai');
+  const review=(data.candidateReview||[]).find(item=>item.trackedTeamId===teamId);
+  const assessments=review?.assessments||[];
+  candidateSelect.innerHTML='';
+  const candidates=provider?.candidates||[];
+  if(!candidates.length){
+   const option=document.createElement('option');option.value='';option.textContent='No saved candidates for this team';candidateSelect.appendChild(option);
+   out.textContent=JSON.stringify({state:'no_candidates',trackedTeamId:teamId,providerState:provider?.state||'never_searched',note:'Run favourite-team discovery first. An empty search is not proof the team is invalid.'},null,2);return;
+  }
+  for(const candidate of candidates){
+   const assessment=assessments.find(item=>item.provider==='sportapi-ai'&&item.providerTeamId===candidate.providerTeamId);
+   const option=document.createElement('option');option.value=candidate.providerTeamId;
+   option.dataset.reviewState=assessment?.reviewState||'needs_review';
+   option.textContent=[candidate.name,candidate.country||'country unknown',candidate.league||'league unknown',candidate.gender||candidate.teamType||'',assessment?.reviewState||'needs_review',candidate.providerTeamId].filter(Boolean).join(' | ');
+   candidateSelect.appendChild(option);
+  }
+  out.textContent=JSON.stringify({trackedTeamId:teamId,canonicalName:team.canonicalName,providerState:provider?.state,candidates:candidates.map(candidate=>({providerTeamId:candidate.providerTeamId,name:candidate.name,country:candidate.country||null,league:candidate.league||null,gender:candidate.gender||null,teamType:candidate.teamType||null,assessment:assessments.find(item=>item.provider==='sportapi-ai'&&item.providerTeamId===candidate.providerTeamId)||null}))},null,2);
+ }catch(error){out.textContent='Could not load saved candidates: '+String(error)}
+ finally{button.disabled=false}
+});
+document.getElementById('confirm-sportapi-candidate').addEventListener('click',async()=>{
+ const button=document.getElementById('confirm-sportapi-candidate'),teamId=document.getElementById('sportapi-review-team').value;
+ const candidateSelect=document.getElementById('sportapi-review-candidate'),providerTeamId=candidateSelect.value;
+ const reviewer=document.getElementById('sportapi-reviewer').value.trim(),out=document.getElementById('sportapi-review-log'),token=document.getElementById('provider-token').value;
+ if(!providerTeamId||!reviewer){out.textContent='Select a saved candidate and enter a reviewer identifier. No mapping was saved.';return}
+ const selected=candidateSelect.options[candidateSelect.selectedIndex];
+ if(selected?.dataset.reviewState!=='candidate_matches_watchlist_context'){
+  out.textContent='This candidate does not have a confirmed name/country/squad-category match. Review the assessment and do not force an unsafe identity. No mapping was saved.';return;
+ }
+ button.disabled=true;out.textContent='Saving explicit SportAPI identity review…';
+ try{
+  const response=await fetch('/api/teams/provider-search/review-sportapi',{method:'POST',headers:{'content-type':'application/json',...(token?{'x-provider-diagnostics-token':token}:{})},body:JSON.stringify({trackedTeamId:teamId,providerTeamId,reviewedBy:reviewer})});
+  const data=await response.json();out.textContent=JSON.stringify(data,null,2);
+  if(response.ok){await load();await document.getElementById('load-sportapi-candidates').click()}
+ }catch(error){out.textContent='Identity review request failed. No mapping is assumed to have been saved: '+String(error)}
  finally{button.disabled=false}
 });
 load();</script>
