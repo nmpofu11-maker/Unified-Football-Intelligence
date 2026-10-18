@@ -39,9 +39,10 @@ function safeTokenEquals(provided: string, expected: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, character => ({
+  const entities: Record<string, string> = {
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-  })[character] ?? character);
+  };
+  return value.replace(/[&<>"']/g, character => entities[character] ?? character);
 }
 function ticketAccessAllowed(req: Request, res: Response): boolean {
   const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
