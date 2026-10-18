@@ -547,8 +547,8 @@ test("SportAPI identity approval requires saved safe candidate context, prevents
     assert.equal(Number(audit.rows[0]?.count), 1);
   } finally {
     await cleanupPool.query("DELETE FROM provider_identity_review_events WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId, legacyTeamId]]).catch(() => undefined);
-    await cleanupPool.query("DELETE FROM team_identity_mappings WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId]]).catch(() => undefined);
-    await cleanupPool.query("DELETE FROM team_search_observations WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId]]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM team_identity_mappings WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId, legacyTeamId]]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM team_search_observations WHERE tracked_team_id = ANY($1::text[])", [[trackedTeamId, secondTeamId, legacyTeamId]]).catch(() => undefined);
     await cleanupPool.end();
   }
 });
