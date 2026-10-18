@@ -71,7 +71,7 @@ test("model excludes otherwise verified results whose source evidence arrived af
   const out = forecastPoisson({
     fixtureId:"upcoming", homeTeamId:"A", awayTeamId:"B",
     kickoffUtc:"2026-03-01T12:00:00.000Z", generatedAt:"2026-02-28T12:00:00.000Z",
-    matches
+    matches, minimumTeamMatches: 6
   });
   assert.equal(out.diagnostics.leagueSamples, 11);
   assert.equal(out.forecast.evidenceState, "insufficient_evidence");
