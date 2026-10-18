@@ -985,5 +985,53 @@ document.getElementById('fetch-fixtures').addEventListener('click',async()=>{con
 load();</script>
 </main></body></html>`));
 
+/**
+ * Optional bounded background ingestion keeps verified result evidence current so
+ * pending tickets can settle without someone manually opening the provider page.
+ * It is opt-in because each cycle makes provider API requests.
+ */
+async function runAutomaticProviderPoll(): Promise<void> {
+  if (!process.env.DATABASE_URL?.trim()) return;
+  const dates = new Set<string>();
+  const now = new Date();
+  for (const offset of [0, 1]) {
+    const day = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000);
+    dates.add(day.toISOString().slice(0, 10));
+  }
+  for (const date of dates) {
+    try {
+      const query = { dateFromUtc: date, dateToUtc: date };
+      const batches = await Promise.all([
+        sportApiAiProvider.fetchFixtures(query),
+        sportmonksProvider.fetchFixtures(query),
+        apiFootballProvider.fetchFixtures(query)
+      ]);
+      const candidates = batches.flat();
+      if (candidates.length > 0) {
+        await persistProviderObservations(candidates);
+        await persistCanonicalEvidence(candidates);
+      }
+      // Even an empty provider response can still reconcile tickets against
+      // previously verified results; it never fabricates a result.
+      await reconcilePendingTickets();
+    } catch {
+      // A failed provider cycle is intentionally silent here: provider diagnostics
+      // expose adapter failures without leaking secrets or interrupting the server.
+    }
+  }
+}
+
+const autoPollingEnabled = process.env.AUTO_PROVIDER_POLLING_ENABLED?.trim().toLowerCase() === "true";
+const autoPollingMinutes = Number(process.env.AUTO_PROVIDER_POLL_INTERVAL_MINUTES ?? 10);
+if (autoPollingEnabled && (!Number.isInteger(autoPollingMinutes) || autoPollingMinutes < 5 || autoPollingMinutes > 60)) {
+  console.error("Automatic provider polling disabled: AUTO_PROVIDER_POLL_INTERVAL_MINUTES must be an integer from 5 to 60.");
+}
 const port = Number(process.env.PORT ?? 3000);
-app.listen(port, () => console.log(`Unified Football Intelligence listening on ${port}`));
+app.listen(port, () => {
+  console.log(`Unified Football Intelligence listening on ${port}`);
+  if (autoPollingEnabled && Number.isInteger(autoPollingMinutes) && autoPollingMinutes >= 5 && autoPollingMinutes <= 60) {
+    console.log(`Automatic provider polling enabled with a ${autoPollingMinutes}-minute interval.`);
+    void runAutomaticProviderPoll();
+    setInterval(() => { void runAutomaticProviderPoll(); }, autoPollingMinutes * 60_000).unref();
+  }
+});
