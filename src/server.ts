@@ -14,7 +14,7 @@ import { previewCandidateReconciliation } from "./domain/reconcileCandidates.js"
 import { curatedTeamSearchAliases, discoverTrackedTeamIdentities, reviewTeamSearchCandidates } from "./domain/teamIdentity.js";
 import { searchTeamAcrossProviders } from "./providers/teamSearch.js";
 import { getCanonicalEvidenceSummary, getObservationStoreStatus, getObservationStoreSummary, getStoredTeamIdentityDiscovery, getStoredTeamSearchReview, getStoredTeamIdentityMappings, reconcileStoredTeamSearchCandidates, persistCanonicalEvidence, persistProviderObservations, persistTeamSearchObservations, replayStoredProviderObservations } from "./storage/postgresObservations.js";
-import { listReviewedTeamMappings, listSavedPredictions, predictStoredFixture, predictionStorageStatus, saveReviewedTeamMapping } from "./prediction/pipeline.js";
+import { listReviewedTeamAliases, listReviewedTeamMappings, listSavedPredictions, predictStoredFixture, predictionStorageStatus, saveReviewedTeamAlias, saveReviewedTeamMapping } from "./prediction/pipeline.js";
 
 const app = express();
 app.disable("x-powered-by");
@@ -572,6 +572,33 @@ app.post("/api/predictions/team-mappings", async (req: Request, res: Response) =
   const result = await saveReviewedTeamMapping({
     teamId: typeof body.teamId === "string" ? body.teamId : "",
     canonicalName: typeof body.canonicalName === "string" ? body.canonicalName : "",
+    reviewedBy: typeof body.reviewedBy === "string" ? body.reviewedBy : ""
+  });
+  const statusCode = result.state === "saved" ? 201 : result.state === "conflict" ? 409 : result.state === "error" ? 503 : 400;
+  return res.status(statusCode).json(result);
+});
+
+app.get("/api/predictions/team-aliases", async (_req: Request, res: Response) => {
+  const result = await listReviewedTeamAliases();
+  return res.status(result.state === "error" ? 503 : 200).json({
+    ...result,
+    note: "Aliases are explicitly reviewed exact-name variants. Matching is case-insensitive with whitespace collapsed; ambiguous names are withheld."
+  });
+});
+
+app.post("/api/predictions/team-aliases", async (req: Request, res: Response) => {
+  const configuredToken = process.env.PROVIDER_DIAGNOSTICS_TOKEN?.trim() ?? "";
+  const providedToken = req.get("x-provider-diagnostics-token") ?? "";
+  if (!configuredToken && !["development", "test"].includes(process.env.NODE_ENV ?? "")) {
+    return res.status(503).json({ state: "disabled", reason: "provider_diagnostics_token_not_configured" });
+  }
+  if (configuredToken && !safeTokenEquals(providedToken, configuredToken)) {
+    return res.status(401).json({ state: "unauthorized", reason: "provider_diagnostics_token_required" });
+  }
+  const body = req.body ?? {};
+  const result = await saveReviewedTeamAlias({
+    teamId: typeof body.teamId === "string" ? body.teamId : "",
+    alias: typeof body.alias === "string" ? body.alias : "",
     reviewedBy: typeof body.reviewedBy === "string" ? body.reviewedBy : ""
   });
   const statusCode = result.state === "saved" ? 201 : result.state === "conflict" ? 409 : result.state === "error" ? 503 : 400;
