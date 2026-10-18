@@ -144,6 +144,95 @@ app.get("/api/storage/observations/summary", async (_req: Request, res: Response
   const summary = await getObservationStoreSummary();
   res.status(summary.state === "error" ? 503 : 200).json(summary);
 });
+app.get("/api/data-pipeline/status", async (_req: Request, res: Response) => {
+  const [observations, canonical, prediction, mappings] = await Promise.all([
+    getObservationStoreSummary(),
+    getCanonicalEvidenceSummary(),
+    predictionStorageStatus(),
+    listReviewedTeamMappings()
+  ]);
+  const providers = providerStatus();
+  const now = Date.now();
+  const providerSummary = providers.map(provider => {
+    const successAt = provider.diagnostics.lastSuccessAt ? Date.parse(provider.diagnostics.lastSuccessAt) : Number.NaN;
+    const recentSuccess = provider.credentialConfigured &&
+      ["success", "success_empty", "partial"].includes(provider.diagnostics.state) &&
+      Number.isFinite(successAt) && now - successAt >= 0 && now - successAt <= 6 * 60 * 60 * 1000;
+    return {
+      name: provider.name,
+      priority: provider.priority,
+      credentialConfigured: provider.credentialConfigured,
+      state: provider.diagnostics.state,
+      recentSuccess,
+      lastSuccessAt: provider.diagnostics.lastSuccessAt ?? null,
+      lastRecordCount: provider.diagnostics.lastRecordCount,
+      lastAcceptedCount: provider.diagnostics.lastAcceptedCount ?? null,
+      lastRejectedCount: provider.diagnostics.lastRejectedCount ?? null,
+      lastErrorCode: provider.diagnostics.lastErrorCode ?? null
+    };
+  });
+  const observationCount = observations.state === "ready" ? observations.totalObservations ?? null : null;
+  const fixtureCount = canonical.state === "ready" ? canonical.corroboratedFixtureCount ?? null : null;
+  const resultCount = canonical.state === "ready" ? canonical.verifiedSettledResultCount ?? null : null;
+  const mappingCount = mappings.state === "ready" ? mappings.mappings.length : null;
+  const stages = {
+    providers: {
+      state: providerSummary.some(p => p.recentSuccess) ? "recent_success" :
+        providerSummary.some(p => p.credentialConfigured) ? "configured_but_not_recently_verified" : "no_credentials_configured",
+      recentSuccessCount: providerSummary.filter(p => p.recentSuccess).length,
+      configuredCount: providerSummary.filter(p => p.credentialConfigured).length,
+      providers: providerSummary
+    },
+    rawObservations: {
+      state: observations.state === "error" ? "error" :
+        observations.state === "not_configured" ? "not_configured" :
+        observationCount === null ? "unknown" : observationCount > 0 ? "available" : "empty",
+      count: observationCount,
+      lastObservedAt: observations.state === "ready" ? observations.lastObservedAt ?? null : null,
+      errorCode: observations.state === "error" ? observations.errorCode ?? null : null
+    },
+    canonicalFixtures: {
+      state: canonical.state === "error" ? "error" :
+        canonical.state === "not_configured" ? "not_configured" :
+        fixtureCount === null ? "unknown" : fixtureCount > 0 ? "available" : "empty",
+      corroboratedCount: fixtureCount,
+      conflictedCount: canonical.state === "ready" ? canonical.conflictedFixtureCount ?? null : null,
+      errorCode: canonical.state === "error" ? canonical.errorCode ?? null : null
+    },
+    verifiedResults: {
+      state: canonical.state === "error" ? "error" :
+        canonical.state === "not_configured" ? "not_configured" :
+        resultCount === null ? "unknown" : resultCount > 0 ? "available" : "empty",
+      count: resultCount
+    },
+    reviewedTeamMappings: {
+      state: mappings.state,
+      count: mappingCount,
+      errorCode: mappings.state === "error" ? mappings.errorCode ?? null : null
+    },
+    predictionStorage: {
+      state: prediction.state,
+      savedForecastCount: prediction.state === "ready" ? prediction.saved_forecasts : null,
+      calibratedForBetting: false
+    }
+  };
+  const blockers: string[] = [];
+  if (!stages.providers.recentSuccessCount) blockers.push("no_provider_success_in_last_6_hours");
+  if (stages.rawObservations.state !== "available") blockers.push("raw_provider_observations_unavailable");
+  if (stages.canonicalFixtures.state !== "available") blockers.push("corroborated_canonical_fixtures_unavailable");
+  if (stages.verifiedResults.state !== "available") blockers.push("verified_historical_results_unavailable");
+  if (stages.reviewedTeamMappings.state !== "ready" || !mappingCount) blockers.push("reviewed_prediction_team_mappings_unavailable");
+  if (stages.predictionStorage.state !== "ready") blockers.push("prediction_storage_not_ready");
+  const dataPresent = blockers.length === 0;
+  return res.status([observations.state, canonical.state, prediction.state, mappings.state].includes("error") ? 503 : 200).json({
+    state: dataPresent ? "data_present_for_fixture_specific_checks" : "insufficient_or_unverified_data",
+    stages,
+    blockers,
+    important: "This endpoint diagnoses pipeline stages only. It does not assert that any particular fixture has enough team history, that its forecast is calibrated, or that betting recommendations are enabled.",
+    bettingRecommendationsEnabled: false
+  });
+});
+
 app.get("/api/providers/status", (_req: Request, res: Response) => {
   const providers = providerStatus();
   res.json({ ...aggregateProviderStatus(providers.map(p => p.diagnostics)), providers });
