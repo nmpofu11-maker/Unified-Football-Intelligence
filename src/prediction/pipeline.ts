@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { Pool } from "pg";
 import { forecastPoisson, type HistoricalMatch } from "../models/poisson.js";
 import { checkFixtureFreshness } from "./freshness.js";
+import { getCanonicalEvidenceSummary } from "../storage/postgresObservations.js";
 
 type State = "ready" | "not_configured" | "error";
 
@@ -183,10 +184,14 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
     return { state: "invalid_request" as const, reason: "valid_canonical_key_and_UTC_generatedAt_required" };
   }
   try {
+    const canonicalEvidence = await getCanonicalEvidenceSummary();
+    if (canonicalEvidence.state !== "ready") {
+      return { state: "unavailable" as const, reason: "CANONICAL_EVIDENCE_UNAVAILABLE" };
+    }
     await ensurePredictionSchema();
     const targetResult = await pool.query(
       `SELECT canonical_key, kickoff_utc, home_name, away_name, competition_name, status, evidence_state, updated_at
-       FROM canonical_fixture_evidence WHERE canonical_key = $1`,
+       FROM canonical_fixture_evidence WHERE canonical_key = $1 AND identity_reviewed = TRUE`,
       [canonicalKey]
     );
     const target = targetResult.rows[0];
@@ -246,7 +251,8 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
               r.home_goals, r.away_goals, r.verified_at, r.providers
        FROM canonical_fixture_evidence f
        JOIN verified_settled_results r ON r.canonical_key = f.canonical_key
-       WHERE f.evidence_state = 'corroborated'
+       WHERE f.identity_reviewed = TRUE
+         AND f.evidence_state = 'corroborated'
          AND f.status = 'finished'
          AND r.evidence_state = 'verified'
          AND f.kickoff_utc < $1::timestamptz
@@ -332,6 +338,10 @@ export async function predictStoredFixture(canonicalKey: string, generatedAt = n
 export async function predictionStorageStatus() {
   if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const };
   try {
+    const canonicalEvidence = await getCanonicalEvidenceSummary();
+    if (canonicalEvidence.state !== "ready") {
+      return { state: "error" as const, reason: "canonical_evidence_unavailable" };
+    }
     await ensurePredictionSchema();
     const schema = await pool.query(
       `SELECT
@@ -358,9 +368,17 @@ export async function predictionStorageStatus() {
     if (ready.canonical_fixture_schema_ready && ready.verified_result_schema_ready) {
       const evidenceResult = await pool.query(
         `SELECT
-           (SELECT COUNT(*)::int FROM canonical_fixture_evidence WHERE evidence_state = 'corroborated' AND status = 'scheduled' AND kickoff_utc > NOW()) AS corroborated_scheduled_fixtures,
-           (SELECT COUNT(*)::int FROM verified_settled_results WHERE evidence_state = 'verified') AS verified_settled_results,
-           (SELECT MAX(verified_at)::text FROM verified_settled_results WHERE evidence_state = 'verified') AS latest_verified_result_at`
+           (SELECT COUNT(*)::int FROM canonical_fixture_evidence
+              WHERE identity_reviewed = TRUE AND evidence_state = 'corroborated'
+                AND status = 'scheduled' AND kickoff_utc > NOW()) AS corroborated_scheduled_fixtures,
+           (SELECT COUNT(*)::int FROM verified_settled_results r
+              JOIN canonical_fixture_evidence f ON f.canonical_key = r.canonical_key
+              WHERE r.evidence_state = 'verified' AND f.identity_reviewed = TRUE
+                AND f.evidence_state = 'corroborated') AS verified_settled_results,
+           (SELECT MAX(r.verified_at)::text FROM verified_settled_results r
+              JOIN canonical_fixture_evidence f ON f.canonical_key = r.canonical_key
+              WHERE r.evidence_state = 'verified' AND f.identity_reviewed = TRUE
+                AND f.evidence_state = 'corroborated') AS latest_verified_result_at`
       );
       evidence = {
         ...evidence,

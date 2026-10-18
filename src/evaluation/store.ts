@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { evaluateOutOfSample, type EvaluationCandidate } from "./outOfSample.js";
+import { getCanonicalEvidenceSummary } from "../storage/postgresObservations.js";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -15,6 +16,10 @@ export async function loadOutOfSampleEvaluation(minimumSampleSize = 30) {
     return { state: "not_configured" as const, reason: "database_not_configured" };
   }
   try {
+    const canonicalEvidence = await getCanonicalEvidenceSummary();
+    if (canonicalEvidence.state !== "ready") {
+      return { state: "error" as const, reason: "canonical_evidence_unavailable" };
+    }
     const [ledgerCount, result] = await Promise.all([
       pool.query("SELECT COUNT(*)::int AS count FROM prediction_ledger"),
       pool.query(
@@ -24,7 +29,10 @@ export async function loadOutOfSampleEvaluation(minimumSampleSize = 30) {
          FROM prediction_ledger pl
          JOIN canonical_fixture_evidence f ON f.canonical_key = pl.canonical_key
          JOIN verified_settled_results r ON r.canonical_key = f.canonical_key
-         WHERE f.status = 'finished'
+         WHERE f.identity_reviewed = TRUE
+           AND f.evidence_state = 'corroborated'
+           AND r.evidence_state = 'verified'
+           AND f.status = 'finished'
          ORDER BY pl.generated_at ASC`
       )
     ]);

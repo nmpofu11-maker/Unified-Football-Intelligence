@@ -1,6 +1,6 @@
 import { Pool, type PoolClient } from "pg";
 import type { ProviderFixtureCandidate } from "../providers/provider.js";
-import { previewCandidateReconciliation } from "../domain/reconcileCandidates.js";
+import { hasCompleteReviewedProviderTeamIdentityCoverage, previewCandidateReconciliation, type ReviewedProviderTeamIdentityMap } from "../domain/reconcileCandidates.js";
 import { classifyProviderIdentityState, discoverTrackedTeamIdentities, reconcileTeamSearchIdentity, reviewTeamSearchCandidates, type TrackedTeamIdentity, type TeamIdentityDiscovery, type TeamSearchIdentityResolution } from "../domain/teamIdentity.js";
 import type { TeamSearchProviderResult } from "../providers/teamSearch.js";
 
@@ -149,9 +149,13 @@ async function ensureSchema(client: PoolClient): Promise<void> {
       status TEXT NOT NULL CHECK (status IN ('scheduled','live','finished','postponed','cancelled','abandoned','unknown')),
       providers TEXT[] NOT NULL,
       evidence_state TEXT NOT NULL CHECK (evidence_state IN ('corroborated','conflicted')),
+      identity_reviewed BOOLEAN NOT NULL DEFAULT FALSE,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  // Existing name-only canonical rows are not trusted under the reviewed-ID gate.
+  // They remain in storage for audit but are excluded from forecasts and settlement.
+  await client.query(`ALTER TABLE canonical_fixture_evidence ADD COLUMN IF NOT EXISTS identity_reviewed BOOLEAN NOT NULL DEFAULT FALSE`);
   await client.query(`
     CREATE TABLE IF NOT EXISTS verified_settled_results (
       canonical_key TEXT PRIMARY KEY REFERENCES canonical_fixture_evidence(canonical_key),
@@ -164,6 +168,40 @@ async function ensureSchema(client: PoolClient): Promise<void> {
     )
   `);
   schemaReady = true;
+}
+
+/** Loads only explicitly confirmed provider IDs from the durable team-search review table. */
+async function loadReviewedProviderTeamIdentityMap(client: PoolClient): Promise<ReviewedProviderTeamIdentityMap> {
+  const result = await client.query<{
+    provider: string;
+    provider_team_id: string;
+    tracked_team_id: string;
+  }>(`SELECT provider, provider_team_id, tracked_team_id
+      FROM team_identity_mappings
+      WHERE mapping_state = 'confirmed'
+        AND provider_identity_state = 'cross_provider_confirmed'
+        AND provider_team_id IS NOT NULL`);
+  const mappings: ReviewedProviderTeamIdentityMap = {};
+  for (const row of result.rows) {
+    mappings[`${row.provider}:${row.provider_team_id}`] = row.tracked_team_id;
+  }
+  return mappings;
+}
+
+/** Returns an empty map on missing/unavailable storage, which makes ID-based matching fail closed. */
+export async function getReviewedProviderTeamIdentityMap(): Promise<ReviewedProviderTeamIdentityMap> {
+  const configuredPool = getPool();
+  if (!configuredPool) return {};
+  let client: PoolClient | undefined;
+  try {
+    client = await configuredPool.connect();
+    await ensureSchema(client);
+    return await loadReviewedProviderTeamIdentityMap(client);
+  } catch {
+    return {};
+  } finally {
+    client?.release();
+  }
 }
 
 function validObservation(candidate: ProviderFixtureCandidate): boolean {
@@ -289,6 +327,8 @@ export interface CanonicalEvidencePersistenceResult {
   corroboratedFixtures: number;
   verifiedResults: number;
   conflictedGroups: number;
+  /** Full snapshot deletion was skipped because one or more supplied provider IDs are unreviewed. */
+  snapshotReplacementSkipped?: boolean;
   errorCode?: string;
 }
 
@@ -305,24 +345,27 @@ export async function persistCanonicalEvidence(
   if (!configuredPool) {
     return { state: "not_configured", corroboratedFixtures: 0, verifiedResults: 0, conflictedGroups: 0 };
   }
-  const previews = previewCandidateReconciliation(candidates);
-  const corroborated = previews.filter(p => p.state === "corroborated" && p.providers.length >= 2);
-  const conflicted = previews.filter(p => p.state === "conflicted");
-  const eligibleResults = corroborated.filter(p =>
-    p.statuses.length === 1 && p.statuses[0] === "finished" &&
-    p.scores.length === 1 && !p.reasons.includes("finished_observation_missing_score")
-  );
   let client: PoolClient | undefined;
   let savedFixtures = 0;
   let savedResults = 0;
   try {
     client = await configuredPool.connect();
     await ensureSchema(client);
+    const reviewedTeamIds = await loadReviewedProviderTeamIdentityMap(client);
+    const previews = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
+    const corroborated = previews.filter(p => p.state === "corroborated" && p.providers.length >= 2);
+    const conflicted = previews.filter(p => p.state === "conflicted");
+    const eligibleResults = corroborated.filter(p =>
+      p.statuses.length === 1 && p.statuses[0] === "finished" &&
+      p.scores.length === 1 && !p.reasons.includes("finished_observation_missing_score")
+    );
+    const snapshotIdentityComplete = hasCompleteReviewedProviderTeamIdentityCoverage(candidates, reviewedTeamIds);
     await client.query("BEGIN");
-    // A replay is a full reconstruction from the latest snapshot of every stored
-    // provider fixture identity. Remove stale canonical keys first, including old
-    // competition-label variants, while keeping raw observations immutable.
-    if (options.replaceSnapshot && candidates.length > 0) {
+    // A replay may delete stale canonical keys only when every supplied provider ID
+    // is explicitly reviewed and the two sides resolve to distinct canonical teams.
+    // Otherwise preserve the existing snapshot while upserting only candidates that
+    // pass the reviewed-ID gate; legacy rows remain hidden by identity_reviewed=false.
+    if (options.replaceSnapshot && candidates.length > 0 && snapshotIdentityComplete) {
       await client.query("DELETE FROM verified_settled_results");
       await client.query("DELETE FROM canonical_fixture_evidence");
     }
@@ -337,17 +380,18 @@ export async function persistCanonicalEvidence(
       competition_name: fixture.competition,
       status: fixture.statuses.length === 1 ? fixture.statuses[0]! : "unknown",
       providers: fixture.providers,
-      evidence_state: fixture.state === "conflicted" ? "conflicted" : "corroborated"
+      evidence_state: fixture.state === "conflicted" ? "conflicted" : "corroborated",
+      identity_reviewed: true
     }));
     if (fixtureRows.length > 0) {
       const fixtureWrite = await client.query(
         `INSERT INTO canonical_fixture_evidence
-          (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state)
+          (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state, identity_reviewed)
          SELECT x.canonical_key, x.kickoff_utc, x.home_name, x.away_name, x.competition_name,
-                x.status, x.providers, x.evidence_state
+                x.status, x.providers, x.evidence_state, x.identity_reviewed
          FROM jsonb_to_recordset($1::jsonb) AS x(
            canonical_key text, kickoff_utc timestamptz, home_name text, away_name text,
-           competition_name text, status text, providers text[], evidence_state text
+           competition_name text, status text, providers text[], evidence_state text, identity_reviewed boolean
          )
          ON CONFLICT (canonical_key) DO UPDATE SET
            kickoff_utc = EXCLUDED.kickoff_utc,
@@ -357,6 +401,7 @@ export async function persistCanonicalEvidence(
            status = EXCLUDED.status,
            providers = ARRAY(SELECT DISTINCT unnest(canonical_fixture_evidence.providers || EXCLUDED.providers)),
            evidence_state = CASE WHEN canonical_fixture_evidence.evidence_state = 'conflicted' OR EXCLUDED.evidence_state = 'conflicted' THEN 'conflicted' ELSE 'corroborated' END,
+           identity_reviewed = EXCLUDED.identity_reviewed,
            updated_at = NOW()
          RETURNING canonical_key`,
         [JSON.stringify(fixtureRows)]
@@ -408,7 +453,9 @@ export async function persistCanonicalEvidence(
       state: corroborated.length + conflicted.length === 0 ? "connected_empty" : "saved",
       corroboratedFixtures: corroborated.length,
       verifiedResults: eligibleResults.length,
-      conflictedGroups: conflicted.length
+      conflictedGroups: conflicted.length,
+      ...(options.replaceSnapshot && candidates.length > 0 && !snapshotIdentityComplete
+        ? { snapshotReplacementSkipped: true } : {})
     };
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => undefined);
@@ -424,6 +471,7 @@ export interface StoredObservationReplayResult {
   canonicalEvidence: CanonicalEvidencePersistenceResult;
   reconciliationDiagnostics?: {
     groups: number;
+    unmappedProviderIdentityCandidates: number;
     singleSourceGroups: number;
     corroboratedGroups: number;
     conflictedGroups: number;
@@ -497,7 +545,11 @@ export async function replayStoredProviderObservations(): Promise<StoredObservat
 
   // Return safe aggregate diagnostics so the operator can identify why stored
   // provider observations fail to reconcile, without exposing raw payloads or secrets.
-  const previews = previewCandidateReconciliation(candidates);
+  const reviewedTeamIds = await getReviewedProviderTeamIdentityMap();
+  const previews = previewCandidateReconciliation(candidates, 5 * 60_000, Date.now(), reviewedTeamIds);
+  const unmappedProviderIdentityCandidates = candidates.filter(candidate =>
+    !hasCompleteReviewedProviderTeamIdentityCoverage([candidate], reviewedTeamIds)
+  ).length;
   const conflictReasonCounts: Record<string, number> = {};
   for (const preview of previews.filter(item => item.state === "conflicted")) {
     for (const reason of preview.reasons) {
@@ -506,6 +558,7 @@ export async function replayStoredProviderObservations(): Promise<StoredObservat
   }
   const reconciliationDiagnostics = {
     groups: previews.length,
+    unmappedProviderIdentityCandidates,
     singleSourceGroups: previews.filter(item => item.state === "single_source").length,
     corroboratedGroups: previews.filter(item => item.state === "corroborated").length,
     conflictedGroups: previews.filter(item => item.state === "conflicted").length,
@@ -609,13 +662,16 @@ export async function getCanonicalEvidenceSummary(): Promise<CanonicalEvidenceSu
     }>(`
       SELECT
         (SELECT COUNT(*)::integer FROM canonical_fixture_evidence
-          WHERE evidence_state = 'corroborated'
+          WHERE identity_reviewed = TRUE AND evidence_state = 'corroborated'
             AND NOT (status = 'live' AND kickoff_utc < NOW() - INTERVAL '6 hours')) AS fixtures,
-        (SELECT COUNT(*)::integer FROM verified_settled_results WHERE evidence_state = 'verified') AS verified_results,
+        (SELECT COUNT(*)::integer FROM verified_settled_results r
+          JOIN canonical_fixture_evidence f ON f.canonical_key = r.canonical_key
+          WHERE r.evidence_state = 'verified' AND f.identity_reviewed = TRUE
+            AND f.evidence_state = 'corroborated') AS verified_results,
         (SELECT COUNT(*)::integer FROM canonical_fixture_evidence
-          WHERE evidence_state = 'conflicted') AS conflicted_fixtures,
+          WHERE identity_reviewed = TRUE AND evidence_state = 'conflicted') AS conflicted_fixtures,
         (SELECT COUNT(*)::integer FROM canonical_fixture_evidence
-          WHERE evidence_state = 'corroborated' AND status = 'live'
+          WHERE identity_reviewed = TRUE AND evidence_state = 'corroborated' AND status = 'live'
             AND kickoff_utc < NOW() - INTERVAL '6 hours') AS stale_live_fixtures
     `);
     const rows = await client.query<{
@@ -628,7 +684,8 @@ export async function getCanonicalEvidenceSummary(): Promise<CanonicalEvidenceSu
       FROM canonical_fixture_evidence f
       LEFT JOIN verified_settled_results r
         ON r.canonical_key = f.canonical_key AND r.evidence_state = 'verified'
-      WHERE f.evidence_state = 'corroborated'
+      WHERE f.identity_reviewed = TRUE
+        AND f.evidence_state = 'corroborated'
         AND NOT (f.status = 'live' AND f.kickoff_utc < NOW() - INTERVAL '6 hours')
       ORDER BY f.kickoff_utc ASC
       LIMIT 500

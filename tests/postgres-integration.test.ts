@@ -6,6 +6,7 @@ import {
   getCanonicalEvidenceSummary,
   getObservationStoreStatus,
   getObservationStoreSummary,
+  persistCanonicalEvidence,
   persistProviderObservations
 } from "../src/storage/postgresObservations.js";
 import type { ProviderFixtureCandidate } from "../src/providers/provider.js";
@@ -93,8 +94,8 @@ test("PostgreSQL ticket reconciliation marks an accumulator lost immediately whe
 
     await cleanupPool.query(
       `INSERT INTO canonical_fixture_evidence
-        (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state)
-       VALUES ($1,$2,$3,$4,$5,'finished',$6,'corroborated')`,
+        (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state, identity_reviewed)
+       VALUES ($1,$2,$3,$4,$5,'finished',$6,'corroborated',TRUE)`,
       [fixtureId, kickoffUtc, "Integration Home FC", "Integration Away FC", "Integration Test League", ["sportapi-ai", "sportmonks"]]
     );
     await cleanupPool.query(
@@ -144,6 +145,77 @@ test("PostgreSQL ticket reconciliation marks an accumulator lost immediately whe
     await cleanupPool.query("DELETE FROM ticket_records WHERE ticket_id = $1", [ticketId]).catch(() => undefined);
     await cleanupPool.query("DELETE FROM verified_settled_results WHERE canonical_key = $1", [fixtureId]).catch(() => undefined);
     await cleanupPool.query("DELETE FROM canonical_fixture_evidence WHERE canonical_key = $1", [fixtureId]).catch(() => undefined);
+    await cleanupPool.end();
+  }
+});
+
+
+test("replay preserves existing canonical rows when supplied provider IDs are unreviewed and hides legacy unreviewed rows", async (t) => {
+  const connectionString = process.env.DATABASE_URL?.trim();
+  if (!connectionString) {
+    t.skip("DATABASE_URL is not set; the dedicated CI PostgreSQL step supplies it");
+    return;
+  }
+
+  const reviewedFixtureId = `ci-reviewed-fixture-${randomUUID()}`;
+  const legacyFixtureId = `ci-legacy-fixture-${randomUUID()}`;
+  const observedAt = new Date().toISOString();
+  const kickoffUtc = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  const cleanupPool = new Pool({ connectionString, max: 1 });
+
+  try {
+    const schema = await getCanonicalEvidenceSummary();
+    assert.equal(schema.state, "ready");
+    for (const [fixtureId, identityReviewed] of [
+      [reviewedFixtureId, true],
+      [legacyFixtureId, false]
+    ] as const) {
+      await cleanupPool.query(
+        `INSERT INTO canonical_fixture_evidence
+          (canonical_key, kickoff_utc, home_name, away_name, competition_name, status, providers, evidence_state, identity_reviewed)
+         VALUES ($1,$2,$3,$4,$5,'finished',$6,'corroborated',$7)`,
+        [fixtureId, kickoffUtc, "Snapshot Home FC", "Snapshot Away FC", "Snapshot Test League", ["sportapi-ai", "sportmonks"], identityReviewed]
+      );
+      await cleanupPool.query(
+        `INSERT INTO verified_settled_results
+          (canonical_key, home_goals, away_goals, providers, evidence_state, verified_at)
+         VALUES ($1,1,0,$2,'verified',NOW())`,
+        [fixtureId, ["sportapi-ai", "sportmonks"]]
+      );
+    }
+
+    const unreviewedCandidate: ProviderFixtureCandidate = {
+      provider: "api-football",
+      providerFixtureId: `ci-unmapped-provider-fixture-${randomUUID()}`,
+      kickoffUtc,
+      home: { name: "Snapshot Home FC", providerTeamId: "unreviewed-home-id" },
+      away: { name: "Snapshot Away FC", providerTeamId: "unreviewed-away-id" },
+      competition: { name: "Snapshot Test League" },
+      status: "finished",
+      score: { home: 1, away: 0 },
+      observedAt,
+      evidenceState: "unverified",
+      rawStatus: "FT",
+      provenance: {
+        provider: "api-football",
+        providerRecordId: "unreviewed-provider-fixture",
+        retrievedAt: observedAt,
+        evidenceState: "unverified"
+      }
+    };
+
+    const replay = await persistCanonicalEvidence([unreviewedCandidate], { replaceSnapshot: true });
+    assert.equal(replay.state, "connected_empty");
+    assert.equal(replay.snapshotReplacementSkipped, true);
+
+    const summary = await getCanonicalEvidenceSummary();
+    assert.equal(summary.state, "ready");
+    assert.ok(summary.fixtures?.some(fixture => fixture.id === reviewedFixtureId));
+    assert.ok(!summary.fixtures?.some(fixture => fixture.id === legacyFixtureId));
+    assert.equal(summary.verifiedSettledResultCount, 1);
+  } finally {
+    await cleanupPool.query("DELETE FROM verified_settled_results WHERE canonical_key = ANY($1::text[])", [[reviewedFixtureId, legacyFixtureId]]).catch(() => undefined);
+    await cleanupPool.query("DELETE FROM canonical_fixture_evidence WHERE canonical_key = ANY($1::text[])", [[reviewedFixtureId, legacyFixtureId]]).catch(() => undefined);
     await cleanupPool.end();
   }
 });

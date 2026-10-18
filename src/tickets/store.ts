@@ -1,5 +1,6 @@
 import { Pool, type PoolClient } from "pg";
 import { settleTicket, type TicketSelection, type VerifiedSettledResult } from "./settlement.js";
+import { getCanonicalEvidenceSummary } from "../storage/postgresObservations.js";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -103,6 +104,10 @@ export async function reconcilePendingTickets() {
   if (!process.env.DATABASE_URL?.trim()) return { state: "not_configured" as const, checked: 0, updated: 0 };
   let client: PoolClient | undefined;
   try {
+    const canonicalEvidence = await getCanonicalEvidenceSummary();
+    if (canonicalEvidence.state !== "ready") {
+      return { state: "error" as const, checked: 0, updated: 0, reason: "canonical_evidence_unavailable" };
+    }
     await ensureTicketSchema();
     client = await pool.connect();
     await client.query("BEGIN");
@@ -115,6 +120,7 @@ export async function reconcilePendingTickets() {
        FROM verified_settled_results r
        JOIN canonical_fixture_evidence f ON f.canonical_key = r.canonical_key
        WHERE r.evidence_state = 'verified' AND f.evidence_state = 'corroborated'
+         AND f.identity_reviewed = TRUE
          AND f.status = 'finished' AND r.verified_at >= f.kickoff_utc`
     );
     const resultsByFixture = new Map<string, VerifiedSettledResult>();
