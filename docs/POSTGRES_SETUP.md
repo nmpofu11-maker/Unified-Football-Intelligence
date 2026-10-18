@@ -1,68 +1,80 @@
-# PostgreSQL setup and persistence verification
+# PostgreSQL setup and end-to-end persistence verification
 
-This app stores **raw, unverified provider observations only**. Connecting a database does not create canonical fixtures, verify scores, load the 80 teams' histories, calibrate forecasts, or enable betting recommendations.
+PostgreSQL is used for append-only raw provider observations, team-search observations, reconciled canonical fixture evidence, verified settled results, reviewed prediction-team mappings, and saved forecast/ticket records. These are separate evidence stages: storing a provider response does **not** make its fixture or score verified.
 
-## 1. Create a PostgreSQL database
+A successful CI build does not prove that a deployed app has a reachable database or working provider credentials. Complete the checks below against the exact deployment you intend to use.
 
-Use a managed PostgreSQL service or a PostgreSQL instance you control. Create a database and a least-privilege application user. Copy the provider's PostgreSQL connection URL from its dashboard. Use the provider's required TLS/SSL options; do not disable certificate verification to work around a connection problem.
+## 1. Provision a database
 
-Keep the connection URL private. It contains credentials. Do not paste it into chat, commit it to Git, or place it in browser/frontend configuration.
+Use a managed PostgreSQL service or a PostgreSQL instance you control. Create a dedicated application user with the minimum privileges required to create/update the application's tables. Follow your provider's TLS requirements; do not disable certificate verification to work around a connection problem.
 
-## 2. Configure the local app
+Keep the connection URL private. It contains credentials. Never paste it into chat, commit it, or expose it through a browser-visible environment variable.
 
-In the repository root, copy `.env.example` to `.env` if you have not already done so. Set `DATABASE_URL` to the connection URL supplied by your database provider, for example:
+## 2. Configure the server
+
+For local development, copy `.env.example` to `.env` and set the values you actually have:
 
 ```dotenv
 DATABASE_URL=postgresql://APP_USER:REDACTED@DB_HOST:5432/APP_DATABASE?sslmode=require
+SPORTAPI_AI_KEY=REDACTED
+SPORTMONKS_API_KEY=REDACTED
+API_FOOTBALL_KEY=REDACTED
+PROVIDER_DIAGNOSTICS_TOKEN=REDACTED
 ```
 
-This is a format example only, not a working credential. Use the exact URL/options supplied for your database. If your provider's URL uses a different SSL setup, follow that provider's instructions.
+The values above are placeholders, not credentials. The current provider adapters accept `SPORTAPI_AI_KEY` (or `SPORTAPI_API_KEY`), `SPORTMONKS_API_KEY` (or `SPORTMONKS_API_TOKEN`), and optionally `API_FOOTBALL_KEY`. Only set keys you are authorized to use. Never commit `.env`.
 
-Restart the Node server after changing `.env`; environment variables are read by the server process at startup. The repository's `.gitignore` excludes `.env`.
+For deployment, configure these in the hosting platform's **server-side/runtime secrets**, not frontend/public build variables. Restart or redeploy after changing them.
 
-## 3. Configure the deployed service
-
-In the hosting platform's **server-side/runtime environment variables or secrets** settings, add `DATABASE_URL` with the same database connection URL. Do not add it to a frontend build variable, public environment variable, or client-side bundle. Redeploy/restart the service so the new variable is loaded.
-
-The database must accept network connections from the hosting service. Restrict database network access and credentials to the minimum necessary. Never publish the connection string in logs or diagnostic output.
-
-## 4. Verify the connection before ingestion
+## 3. Check database connectivity
 
 With the server running, open:
 
-- Local: `http://localhost:3003/api/storage/status` (use the port configured for your server)
+- Local: `http://localhost:3003/api/storage/status` (use the configured port)
 - Deployed: `https://YOUR-SERVICE-HOST/api/storage/status`
 
-Expected connected response:
+Interpret the response:
 
-```json
-{
-  "configured": true,
-  "state": "ready",
-  "observationCount": 0
-}
-```
+- `state: "not_configured"`: the running server did not receive `DATABASE_URL`.
+- `state: "error"`: connection, permissions, TLS, or schema initialization failed; inspect sanitized server-side diagnostics.
+- `state: "ready"`: a live query and raw-observation schema check succeeded. This alone does not prove ingestion or reconciliation works.
 
-The count may be greater than zero if observations were already stored. Interpret results as follows:
+Then inspect:
 
-- `state: "not_configured"`: the running process did not receive `DATABASE_URL`; check the correct environment and restart.
-- `state: "error"`: the app could not use the database. The `errorCode` is sanitized; inspect the database provider's connection settings and server-side logs without exposing credentials.
-- `state: "ready"`: a live query succeeded. This is a connectivity check, not yet proof that fixture observations are being saved.
+- `/api/storage/observations/summary` — persisted raw observation counts and timestamps.
+- `/api/data-pipeline/status` — provider freshness, raw observations, canonical fixtures, verified results, reviewed mappings, prediction evidence and blockers.
+- `/api/predictions/status` — prediction-storage readiness and evidence counts.
+- `/api/history/status` — history, watchlist and discovery status.
 
-## 5. Verify an observation is durable
+Unavailable counts should remain unknown/null; do not interpret them as zero.
 
-1. Confirm `/api/storage/status` reports `state: "ready"`.
-2. In the app dashboard, run **Check providers** once for a date with provider data.
-3. Inspect the response's `persistence` object. Expect `state: "saved"` and `inserted` greater than zero when new valid candidates were returned. `duplicatesSkipped` can be greater than zero on repeat checks because observations are deduplicated.
-4. Re-open `/api/storage/status` and confirm `observationCount` increased.
-5. Restart the app process and query `/api/storage/status` again. The count should remain. For a deployment/redeploy test, repeat against the same external database.
+## 4. Verify raw observation persistence
 
-If no records were returned by a provider, a `connected_empty` result can still demonstrate that the database write path reached the database, but it does not prove a new row was inserted. Do not treat a provider HTTP 200 alone as evidence that fixture data exists.
+1. Open the dashboard and run **Check providers** once for a date with provider coverage.
+2. Inspect the response's `persistence` details. For newly accepted observations, expect `state: "saved"` and `inserted > 0`. A repeat request can report duplicates skipped.
+3. Recheck `/api/storage/status` and `/api/storage/observations/summary`.
+4. Restart/redeploy the service without changing `DATABASE_URL`, then confirm that the records remain.
 
-## Current boundaries
+A `connected_empty` result can show that the database write path was reachable when a provider returned no valid records, but it does not prove that new rows were inserted. A provider HTTP 200 or a non-empty in-memory response is not persistence evidence.
 
-- PostgreSQL stores provider observations with provider IDs, observed time, provenance and raw normalized payload.
-- Observations retain `evidenceState: "unverified"`. The database write path rejects candidates with any other evidence state.
-- Canonical fixture creation remains disabled; the reconciliation output is only a preview.
-- Strict provider team identity mappings are persisted when unique exact/curated-name candidates from API-Football and Sportmonks agree on country. Ambiguous and unresolved teams remain unconfirmed. Competition/season mapping and settled-result verification remain outstanding.
-- Verified history, calibrated forecasts, and betting recommendations remain disabled until their separate evidence and validation gates pass.
+## 5. Verify reconciliation and verified history
+
+Raw observations are deliberately unverified. Use the protected history replay/reconciliation workflow only after raw persistence is confirmed. Then inspect `/api/data-pipeline/status`, `/api/fixtures`, and `/api/history/status`.
+
+- A canonical fixture must have corroborating provider evidence and a safe, unambiguous identity.
+- A finished score enters the verified-results ledger only when independent providers agree on fixture identity, finished status and score.
+- Conflicts and unresolved provider team IDs must remain blocked; do not auto-map a team merely to increase coverage.
+- Replay diagnostics should be checked for conflict reasons and stale records.
+- Confirm counts persist after restart/redeploy.
+
+This app has distinct provider team-search mappings and prediction-team mappings. Review and save the appropriate identity mapping explicitly; do not assume a catalogue candidate is an approved team ID.
+
+## 6. Verify prediction readiness without bypassing gates
+
+Inspect `/api/predictions/status`, `/api/predictions/ledger?limit=20`, and `/api/data-pipeline/status`. A forecast requires a corroborated fresh future fixture, reviewed exact team identities, and sufficient verified settled results from the same competition strictly before kickoff. The model must abstain with null probabilities when those conditions fail.
+
+Forecast availability is not the same as model calibration. Betting recommendations remain disabled until genuinely out-of-sample evaluation and calibration requirements are met. Never add bookmaker odds as a substitute for team-performance evidence or use odds to drive the independent prediction model.
+
+## Current limitation
+
+No deployment URL, production database, or live provider credentials are verified by CI alone. The database-backed CI test uses an ephemeral PostgreSQL instance and verifies application persistence logic; it does not certify production connectivity, provider quota/coverage, full 80-team mapping, historical completeness, model calibration, or live ticket settlement.
