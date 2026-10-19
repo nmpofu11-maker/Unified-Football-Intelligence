@@ -275,13 +275,44 @@ app.get("/api/providers/history", async (req: Request, res: Response) => {
   const range = validateHistoricalDateRange(from, to, todayUtc, 7);
   if (range.state !== "valid") return res.status(400).json({ state: "invalid_request", reason: range.reason });
 
-  const query = { dateFromUtc: range.from, dateToUtc: range.to };
-  const [sportApiAi, sportmonks, apiFootball] = await Promise.all([
-    sportApiAiProvider.fetchFixtures(query),
-    sportmonksProvider.fetchFixtures(query),
-    apiFootballProvider.fetchFixtures(query)
-  ]);
-  const candidates = [...sportApiAi, ...sportmonks, ...apiFootball];
+  // Provider adapters intentionally accept one UTC calendar date per request.
+  // Expand the validated range here and query sequentially by day to avoid a
+  // burst of up to 21 simultaneous calls and preserve per-day diagnostics.
+  const candidates: import("./providers/provider.js").ProviderFixtureCandidate[] = [];
+  const providerRuns: Array<{ date: string; providers: Array<Record<string, unknown>> }> = [];
+  const startMs = Date.parse(`${range.from}T00:00:00.000Z`);
+  const endMs = Date.parse(`${range.to}T00:00:00.000Z`);
+  for (let dayMs = startMs; dayMs <= endMs; dayMs += 86_400_000) {
+    const date = new Date(dayMs).toISOString().slice(0, 10);
+    const query = { dateFromUtc: date, dateToUtc: date };
+    const [sportApiAi, sportmonks, apiFootball] = await Promise.all([
+      sportApiAiProvider.fetchFixtures(query),
+      sportmonksProvider.fetchFixtures(query),
+      apiFootballProvider.fetchFixtures(query)
+    ]);
+    candidates.push(...sportApiAi, ...sportmonks, ...apiFootball);
+    providerRuns.push({
+      date,
+      providers: [sportApiAiProvider, sportmonksProvider, apiFootballProvider].map(adapter => {
+        const d = adapter.diagnostics();
+        return {
+          name: d.provider,
+          state: d.state,
+          attemptedAt: d.lastAttemptAt ?? null,
+          succeededAt: d.lastSuccessAt ?? null,
+          records: d.lastRecordCount,
+          accepted: d.lastAcceptedCount ?? null,
+          rejected: d.lastRejectedCount ?? null,
+          httpStatus: d.lastHttpStatus ?? null,
+          error: d.lastErrorCode ?? null,
+          responseShape: d.lastResponseShape ?? null
+        };
+      })
+    });
+  }
+  const sportApiAiCount = candidates.filter(candidate => candidate.provider === "sportapi-ai").length;
+  const sportmonksCount = candidates.filter(candidate => candidate.provider === "sportmonks").length;
+  const apiFootballCount = candidates.filter(candidate => candidate.provider === "api-football").length;
   const persistence = await persistProviderObservations(candidates);
   const canonicalEvidence = await persistCanonicalEvidence(candidates);
   const ticketSettlement = await reconcilePendingTickets();
@@ -298,7 +329,8 @@ app.get("/api/providers/history", async (req: Request, res: Response) => {
     state: "historical_ingestion_completed",
     range: { from: range.from, to: range.to, daysInclusive: range.daysInclusive },
     candidateCount: candidates.length,
-    candidateCountsByProvider: { "sportapi-ai": sportApiAi.length, sportmonks: sportmonks.length, "api-football": apiFootball.length },
+    candidateCountsByProvider: { "sportapi-ai": sportApiAiCount, sportmonks: sportmonksCount, "api-football": apiFootballCount },
+    providerRuns,
     candidateCountsByStatus,
     corroboratedFixtures: canonicalEvidence.corroboratedFixtures,
     verifiedSettledResults: canonicalEvidence.verifiedResults,
@@ -313,7 +345,7 @@ app.get("/api/providers/history", async (req: Request, res: Response) => {
       conflicted: reconciliationPreview.filter(item => item.state === "conflicted").length,
       singleSource: reconciliationPreview.filter(item => item.state === "single_source").length
     },
-    note: "Only finished scores corroborated by at least two providers are promoted to verified settled results. A successful request or nonzero candidate count does not guarantee verified history was created."
+    note: "Each provider is queried once per UTC date in the selected range. Only finished scores corroborated by at least two providers are promoted to verified settled results; inspect providerRuns for per-date errors and coverage."
   });
 });
 
